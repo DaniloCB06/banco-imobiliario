@@ -1,5 +1,6 @@
 # Estrutura inicial do Projeto sugerida
 
+ ```
 banco-imobiliario/                               ← PASTA do projeto
 ├─ pom.xml                                       ← ARQUIVO
 ├─ src/                                          ← PASTA
@@ -44,3 +45,4 @@ banco-imobiliario/                               ← PASTA do projeto
 │        ├─ PrisaoTest.java                      ← ARQUIVO
 │        ├─ FalenciaTest.java                    ← ARQUIVO
 │        └─ LoaderTest.java                      ← ARQUIVO
+ ```
