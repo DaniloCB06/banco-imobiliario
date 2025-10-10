@@ -1,74 +1,142 @@
 package Banco_Imobiliario_Models;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Regra #1: lançamento virtual de 2 dados.
+ * Regras #1 e #2 (parcial):
+ *  - Regra #1: lançar dados.
+ *  - Regra #2: deslocar o peão do jogador da vez pelo valor dos dados.
  *
- * Métodos da Regra #1:
- *  - novaPartida(numJogadores, seedOpcional)
- *  - lancarDados() -> int[]{d1, d2}
- *  - houveDuplaNoUltimoLancamento()
- *  - getContagemDuplasConsecutivasDaVez()
  */
 public class GameModel {
 
-    // RNG e dados (objetos não públicos)
+    // ----- Regra #1 (existente) -----
     private RandomProvider rng;
     private final Dado dado1 = new Dado();
     private final Dado dado2 = new Dado();
     private Turno turno;
 
+    // Guardamos o último lançamento para a Regra 2
+    private Integer ultimoD1 = null, ultimoD2 = null;
+
+    private final List<Jogador> jogadores = new ArrayList<>();
+    private Tabuleiro tabuleiro; 
+
     /**
-     * Inicia uma nova partida. Apenas validações mínimas aqui.
-     * @param numJogadores entre 2 e 6 (regra do jogo)
-     * @param seedOpcional se não-nula, torna os lançamentos determinísticos (útil p/ testes)
+     * Inicia uma nova partida. Validações mínimas.
+     * Cria os jogadores (0..numJogadores-1) e zera suas posições.
+     * O tabuleiro deve ser carregado separadamente antes de deslocar.
      */
     public void novaPartida(int numJogadores, Long seedOpcional) {
         if (numJogadores < 2 || numJogadores > 6) {
             throw new IllegalArgumentException("Número de jogadores deve estar entre 2 e 6.");
         }
         this.rng = new RandomProvider(seedOpcional);
-        this.turno = new Turno(0); // ordem fixa simplificada nesta iteração
+        this.turno = new Turno(0); // ordem fixa nesta iteração
+
+        this.jogadores.clear();
+        for (int i = 0; i < numJogadores; i++) {
+            // saldo não é relevante para esta regra (ainda), iniciamos com 4000
+            this.jogadores.add(new Jogador(i, 4000));
+        }
+        this.ultimoD1 = this.ultimoD2 = null;
     }
 
     private void exigirPartidaIniciada() {
-        if (rng == null || turno == null) {
+        if (rng == null || turno == null || jogadores.isEmpty()) {
             throw new IllegalStateException("Partida não iniciada. Chame novaPartida().");
         }
     }
 
-    /**
-     * Regra #1: lança dois dados virtuais (1..6) e retorna os valores.
-     * Também registra (no estado do turno) se foi dupla e quantas duplas seguidas.
-     */
+    /** Permite injetar o tabuleiro que foi carregado */
+    public void setTabuleiro(Tabuleiro tabuleiro) {
+        if (tabuleiro == null || tabuleiro.tamanho() <= 0) {
+            throw new IllegalArgumentException("Tabuleiro inválido.");
+        }
+        this.tabuleiro = tabuleiro;
+    }
+
+    private void exigirTabuleiroCarregado() {
+        if (this.tabuleiro == null) {
+            throw new IllegalStateException("Tabuleiro não carregado.");
+        }
+    }
+
+    // ---------- Regra #1 (lançar dados) ----------
     public int[] lancarDados() {
         exigirPartidaIniciada();
-
-        int d1 = dado1.rolar(rng);   // 1..6
-        int d2 = dado2.rolar(rng);   // 1..6
-
+        int d1 = dado1.rolar(rng);
+        int d2 = dado2.rolar(rng);
         turno.registrarLance(d1, d2);
-
-        // Observação: a consequência de 2ª/3ª dupla (nova jogada / prisão)
-        // será tratada nas regras de movimento/prisão nas próximas etapas,
-        // conforme as regras oficiais (dupla -> nova jogada; 3ª dupla -> prisão) :contentReference[oaicite:4]{index=4}.
+        this.ultimoD1 = d1;
+        this.ultimoD2 = d2;
         return new int[]{ d1, d2 };
     }
 
-    /** @return true se o último lançamento foi uma dupla */
     public boolean houveDuplaNoUltimoLancamento() {
         exigirPartidaIniciada();
         return turno.houveDupla();
     }
 
-    /** @return número de duplas consecutivas do jogador da vez (reinicia quando não é dupla) */
     public int getContagemDuplasConsecutivasDaVez() {
         exigirPartidaIniciada();
         return turno.getDuplasConsecutivas();
     }
 
-    /** Disponível para as próximas regras; aqui mantemos simples. */
     public int getJogadorDaVez() {
         exigirPartidaIniciada();
         return turno.getJogadorDaVez();
     }
+
+    // ---------- Regra #2 (apenas deslocamento) ----------
+
+    /**
+     * Desloca o peão do jogador da vez pela soma do último lançamento.
+     * Pré-condições:
+     *  - Partida iniciada
+     *  - Tabuleiro carregado
+     *  - Deve haver um lançamento realizado (usa o último d1,d2)
+     *
+     * Efeitos:
+     *  - Atualiza a posição do jogador da vez conforme (pos + d1 + d2) % tamanhoTabuleiro
+     *  - NÃO aplica honorários, troca de turno, prisão ou efeitos de casa.
+     *
+     * @return ResultadoMovimento com (id, posAnterior, deslocamento, posAtual)
+     */
+    public ResultadoMovimento deslocarPiao() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (ultimoD1 == null || ultimoD2 == null) {
+            throw new IllegalStateException("É necessário lançar os dados antes de deslocar.");
+        }
+
+        final int id = getJogadorDaVez();
+        final Jogador j = jogadores.get(id);
+
+        return Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
+    }
+
+    // ---------- Consultas úteis para testes da regra #2 ----------
+    public int getPosicaoJogador(int idJogador) {
+        exigirPartidaIniciada();
+        return jogadores.get(idJogador).getPosicao();
+    }
+
+    public int getQuantidadeCasasTabuleiro() {
+        exigirTabuleiroCarregado();
+        return tabuleiro.tamanho();
+    }
+    
+    
+    // --------- APENAS PARA TESTES ----------
+    
+    public void carregarTabuleiroMinimoParaTeste(int nCasas) {
+        if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
+        // monta internamente usando as classes package-private
+        java.util.List<Casa> casas = new java.util.ArrayList<>();
+        for (int i = 0; i < nCasas; i++) casas.add(new Casa());
+        this.setTabuleiro(new Tabuleiro(casas));
+    }
+
 }
