@@ -4,9 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Regras #1 e #2 (parcial):
- *  - Regra #1: lançar dados.
- *  - Regra #2: deslocar o peão do jogador da vez pelo valor dos dados.
+ * Regras #1 e #2 (parcial) + Regra #3 (comprar propriedade sem dono)
  */
 public class GameModel {
 
@@ -15,6 +13,9 @@ public class GameModel {
     private final Dado dado1 = new Dado();
     private final Dado dado2 = new Dado();
     private Turno turno;
+
+    // Banco (software como banqueiro, saldo inicial 200_000)
+    private Banco banco;
 
     // Guardamos o último lançamento para a Regra 2
     private Integer ultimoD1 = null, ultimoD2 = null;
@@ -36,9 +37,8 @@ public class GameModel {
     }
 
     /**
-     * Inicia uma nova partida. Validações mínimas.
-     * Cria os jogadores (0..numJogadores-1) e zera suas posições.
-     * O tabuleiro deve ser carregado separadamente antes de deslocar.
+     * Inicia uma nova partida (2..6 jogadores).
+     * Cria jogadores e zera posições. O tabuleiro deve ser carregado separadamente.
      */
     public void novaPartida(int numJogadores, Long seedOpcional) {
         if (numJogadores < 2 || numJogadores > 6) {
@@ -46,6 +46,7 @@ public class GameModel {
         }
         this.rng = new RandomProvider(seedOpcional);
         this.turno = new Turno(0); // ordem fixa nesta iteração
+        this.banco = new Banco(200_000);
 
         this.jogadores.clear();
         for (int i = 0; i < numJogadores; i++) {
@@ -75,7 +76,6 @@ public class GameModel {
     }
 
     // ---------- Regra #1 (lançar dados) ----------
-    /** Agora retorna um objeto de resultado em vez de array. */
     public ResultadoDados lancarDados() {
         exigirPartidaIniciada();
         int d1 = dado1.rolar(rng);
@@ -117,7 +117,49 @@ public class GameModel {
         return Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
     }
 
-    // ---------- Consultas úteis para testes da regra #2 ----------
+    // ---------- Regra #3 (comprar propriedade sem dono) ----------
+    /**
+     * Tenta comprar a propriedade na casa atual do jogador da vez.
+     * Regras:
+     *  - Só permite se a casa atual for Propriedade e estiver sem dono.
+     *  - Só permite se o jogador tiver saldo suficiente.
+     *  - Pagamento é automático (débito do jogador, crédito do Banco).
+     * Retorna true se a compra foi realizada; false caso contrário.
+     */
+    public boolean comprarPropriedade() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        final Jogador jogador = jogadores.get(getJogadorDaVez());
+        final Casa casaAtual = tabuleiro.getCasa(jogador.getPosicao());
+
+        if (!(casaAtual instanceof Propriedade)) {
+            return false; // nada a comprar
+        }
+        final Propriedade prop = (Propriedade) casaAtual;
+
+        if (prop.temDono()) {
+            return false; // já possui dono
+        }
+
+        final int preco = prop.getPrecoTerreno();
+        if (preco <= 0) {
+            return false; // preço inválido/indefinido
+        }
+        if (jogador.getSaldo() < preco) {
+            return false; // saldo insuficiente
+        }
+
+        // pagamento automático
+        jogador.debitar(preco);
+        banco.creditar(preco);
+
+        // transfere a posse
+        prop.setDono(jogador);
+        return true;
+    }
+
+    // ---------- Consultas úteis para testes ----------
     public int getPosicaoJogador(int idJogador) {
         exigirPartidaIniciada();
         return jogadores.get(idJogador).getPosicao();
@@ -133,8 +175,27 @@ public class GameModel {
         if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
         List<Casa> casas = new ArrayList<>(nCasas);
         for (int i = 0; i < nCasas; i++) {
-            // Compatível com Casa(int posicao, String nome, String tipo)
             casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+        }
+        this.setTabuleiro(new Tabuleiro(casas));
+    }
+
+    /**
+     * Helper de teste: cria um tabuleiro com N casas genéricas e
+     * coloca **uma Propriedade** na posição indicada, com preço informado.
+     */
+    public void carregarTabuleiroDeTesteComUmaPropriedade(int nCasas, int idxPropriedade, int precoTerreno) {
+        if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
+        if (idxPropriedade < 0 || idxPropriedade >= nCasas) {
+            throw new IllegalArgumentException("Índice de propriedade fora do tabuleiro.");
+        }
+        List<Casa> casas = new ArrayList<>(nCasas);
+        for (int i = 0; i < nCasas; i++) {
+            if (i == idxPropriedade) {
+                casas.add(new Propriedade(i, "Propriedade " + i, precoTerreno, 0, 0, new int[0]));
+            } else {
+                casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+            }
         }
         this.setTabuleiro(new Tabuleiro(casas));
     }

@@ -1,7 +1,5 @@
 package Banco_Imobiliario_Models;
 
-//esta feito apenas de placeholder, tem que implementar mais ainda
-
 final class Banco {
     private static final int HONORARIOS = 200;
     private int saldo;
@@ -14,5 +12,10 @@ final class Banco {
         if (saldo < HONORARIOS) throw new IllegalStateException("Banco sem saldo suficiente");
         saldo -= HONORARIOS;
         j.creditar(HONORARIOS);
+    }
+
+    void creditar(int valor) {
+        if (valor < 0) throw new IllegalArgumentException("valor < 0");
+        saldo += valor;
     }
 }
