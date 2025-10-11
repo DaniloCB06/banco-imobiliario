@@ -45,14 +45,18 @@ final class Propriedade extends Casa {
     void setDono(Jogador novoDono) { this.dono = novoDono; }
 
     int getAluguel(int numCasas) {
-        return alugueis.getOrDefault(numCasas, 0); // (hotel pode ser tratado depois)
+        return alugueis.getOrDefault(numCasas, 0);
+    }
+
+    int calcularAluguelAtual() {
+        int indice = hotel ? Math.max(1, numCasas) : numCasas;
+        return getAluguel(indice);
     }
 
     int getNumCasas() { return numCasas; }
     boolean temHotel() { return hotel; }
 
     boolean podeConstruirCasa() {
-        // Até 4 casas, 1 por queda; se já houver hotel, não construímos mais casas nesta iteração
         return !hotel && numCasas < 4;
     }
     void construirCasa() {
@@ -61,11 +65,29 @@ final class Propriedade extends Casa {
     }
 
     boolean podeConstruirHotel() {
-        // Hotel requer ao menos 1 casa e ainda não existir hotel
         return !hotel && numCasas >= 1;
     }
     void construirHotel() {
         if (!podeConstruirHotel()) throw new IllegalStateException("Não é possível construir hotel.");
         hotel = true;
+    }
+
+    int getPosicao() { return this.posicao; }
+
+    /** Valor agregado atual = terreno + (casas * preçoCasa) + (hotel ? preçoHotel : 0). */
+    int valorAgregadoAtual() {
+        long base = (long) precoTerreno
+                  + (long) numCasas * (long) precoCompraCasa
+                  + (hotel ? (long) precoCompraHotel : 0L);
+        // evita overflow negativo em casos extremos
+        if (base < 0) base = 0;
+        return (int) base;
+    }
+
+    /** Devolve a propriedade ao banco: sem dono e sem construções. */
+    void resetarParaBanco() {
+        this.dono = null;
+        this.numCasas = 0;
+        this.hotel = false;
     }
 }

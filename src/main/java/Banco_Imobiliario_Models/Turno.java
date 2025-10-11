@@ -2,7 +2,6 @@ package Banco_Imobiliario_Models;
 
 /**
  * Estado mínimo do turno: quem joga e controle de duplas consecutivas.
- * A passagem de turno/efeitos de 3ª dupla serão tratados nas próximas regras.
  */
 final class Turno {
     private int jogadorDaVez;
@@ -22,6 +21,10 @@ final class Turno {
         } else {
             duplasConsecutivas = 0;
         }
+    }
+
+    void resetarDuplas() {
+        this.duplasConsecutivas = 0;
     }
 
     boolean houveDupla() {

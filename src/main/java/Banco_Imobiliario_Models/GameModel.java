@@ -1,25 +1,17 @@
 package Banco_Imobiliario_Models;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * API pública do Model (Iteração 1)
  *
- * Cobertura nesta etapa:
- *  - Regra #1: lançar dados.
- *  - Regra #2 (parcial): deslocar o peão (sem efeitos).
- *  - Regra #3: comprar propriedade sem dono (pagamento automático).
- *  - Regra #4: construir imóvel (casa/hotel) na propriedade em que o jogador ACABOU DE CAIR,
- *              obedecendo às Regras-Adicionais:
- *                * Na 1ª vez que cair: pode comprar (se disponível).
- *                * Nas vezes subsequentes em que cair na MESMA propriedade: pode construir UM imóvel por vez.
- *                * Hotel requer pelo menos 1 casa.
- *                * Limites: 0–4 casas e 1 hotel.
+ * Regras cobertas: #1, #2 (parcial), #3, #4, #5, #6 e #7 (pagamento, liquidação e falência).
  *
  * Observações:
- *  - Todas as demais classes do pacote são não públicas.
- *  - Não há troca de turno, prisão, honorários, aluguel ou falência nesta classe (virão em regras futuras).
+ *  - Todas as classes fora GameModel permanecem não públicas.
+ *  - Sem trocas/hipoteca; liquidez via venda ao banco por 90% do agregado.
  */
 public class GameModel {
 
@@ -40,6 +32,9 @@ public class GameModel {
     private boolean jaConstruiuNestaQueda = false;
     private boolean acabouDeComprarNestaQueda = false;
 
+    // Sinaliza que o último lançamento configurou 3ª dupla consecutiva (vai para prisão)
+    private boolean deveIrParaPrisaoPorTerceiraDupla = false;
+
     // Estado do jogo
     private final List<Jogador> jogadores = new ArrayList<>();
     private Tabuleiro tabuleiro;
@@ -59,10 +54,6 @@ public class GameModel {
     //                                     SETUP
     // =====================================================================================
 
-    /**
-     * Inicia uma nova partida (2..6 jogadores).
-     * Cria jogadores e zera posições. O tabuleiro deve ser carregado separadamente.
-     */
     public void novaPartida(int numJogadores, Long seedOpcional) {
         if (numJogadores < 2 || numJogadores > 6) {
             throw new IllegalArgumentException("Número de jogadores deve estar entre 2 e 6.");
@@ -77,10 +68,10 @@ public class GameModel {
         }
 
         this.ultimoD1 = this.ultimoD2 = null;
+        this.deveIrParaPrisaoPorTerceiraDupla = false;
         limparContextoDeQueda();
     }
 
-    /** Permite injetar o tabuleiro carregado (loader/planilha virá em outra unidade). */
     public void setTabuleiro(Tabuleiro tabuleiro) {
         if (tabuleiro == null || tabuleiro.tamanho() <= 0) {
             throw new IllegalArgumentException("Tabuleiro inválido.");
@@ -117,6 +108,10 @@ public class GameModel {
         turno.registrarLance(d1, d2);
         this.ultimoD1 = d1;
         this.ultimoD2 = d2;
+
+        if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
+            this.deveIrParaPrisaoPorTerceiraDupla = true;
+        }
         return new ResultadoDados(d1, d2);
     }
 
@@ -137,12 +132,9 @@ public class GameModel {
 
     // =====================================================================================
     //                          REGRA #2 (PARCIAL): DESLOCAMENTO
+    //                        + ENTRADA/SAÍDA de PRISÃO (Regra #6)
     // =====================================================================================
 
-    /**
-     * Desloca o peão do jogador da vez pela soma do último lançamento.
-     * NÃO aplica honorários, troca de turno, prisão ou efeitos de casa.
-     */
     public ResultadoMovimento deslocarPiao() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -151,13 +143,43 @@ public class GameModel {
         }
         final int id = getJogadorDaVez();
         final Jogador j = jogadores.get(id);
+
+        if (deveIrParaPrisaoPorTerceiraDupla) {
+            int posAnt = j.getPosicao();
+            enviarParaPrisao(id);
+            deveIrParaPrisaoPorTerceiraDupla = false;
+            turno.resetarDuplas();
+            this.posicaoDaQuedaAtual = j.getPosicao();
+            this.jaConstruiuNestaQueda = false;
+            this.acabouDeComprarNestaQueda = false;
+            return new ResultadoMovimento(id, posAnt, 0, j.getPosicao());
+        }
+
+        if (j.isNaPrisao()) {
+            boolean saiu = tentarSairDaPrisaoComDuplaOuCarta();
+            if (!saiu) {
+                this.posicaoDaQuedaAtual = j.getPosicao();
+                this.jaConstruiuNestaQueda = false;
+                this.acabouDeComprarNestaQueda = false;
+                return new ResultadoMovimento(id, j.getPosicao(), 0, j.getPosicao());
+            }
+        }
+
         ResultadoMovimento r = Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
 
-        // Reinicia o contexto da QUEDA (usado pelas construções)
         this.posicaoDaQuedaAtual = j.getPosicao();
         this.jaConstruiuNestaQueda = false;
         this.acabouDeComprarNestaQueda = false;
 
+        Casa casaAtual = tabuleiro.getCasa(j.getPosicao());
+        if ("VA_PARA_PRISAO".equalsIgnoreCase(casaAtual.getTipo())) {
+            int posAnt = j.getPosicao();
+            enviarParaPrisao(id);
+            this.posicaoDaQuedaAtual = j.getPosicao();
+            this.jaConstruiuNestaQueda = false;
+            this.acabouDeComprarNestaQueda = false;
+            return new ResultadoMovimento(id, posAnt, 0, j.getPosicao());
+        }
         return r;
     }
 
@@ -165,15 +187,6 @@ public class GameModel {
     //                       REGRA #3: COMPRAR PROPRIEDADE SEM DONO
     // =====================================================================================
 
-    /**
-     * Tenta comprar a propriedade na casa atual do jogador da vez.
-     * Regras:
-     *  - Só se a casa atual for Propriedade e estiver sem dono.
-     *  - Só se o jogador tiver saldo suficiente.
-     *  - Pagamento é automático (débito do jogador, crédito do Banco).
-     *  - Marca que a compra ocorreu nesta QUEDA (não poderá construir nesta mesma queda).
-     * @return true se a compra foi realizada; false caso contrário.
-     */
     public boolean comprarPropriedade() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -189,14 +202,10 @@ public class GameModel {
         if (preco <= 0) return false;
         if (jogador.getSaldo() < preco) return false;
 
-        // pagamento automático
         jogador.debitar(preco);
         banco.creditar(preco);
-
-        // transfere a posse
         prop.setDono(jogador);
 
-        // Marca que acabou de comprar nesta queda (Regras-Adicionais: só constrói em quedas subsequentes)
         this.acabouDeComprarNestaQueda = true;
         return true;
     }
@@ -205,15 +214,6 @@ public class GameModel {
     //                       REGRA #4: CONSTRUÇÕES (CASA / HOTEL)
     // =====================================================================================
 
-    /**
-     * Constrói UMA casa na propriedade onde o jogador da vez ACABOU DE CAIR,
-     * respeitando:
-     *  - Construções só em quedas subsequentes na MESMA propriedade (não na queda da compra).
-     *  - Apenas 1 imóvel por queda (casa OU hotel).
-     *  - Limite de 0–4 casas; sem hotel presente.
-     *  - Saldo suficiente.
-     * @return true se a construção ocorreu.
-     */
     public boolean construirCasa() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -227,7 +227,7 @@ public class GameModel {
         if (!(casa instanceof Propriedade)) return false;
 
         final Propriedade prop = (Propriedade) casa;
-        if (!prop.temDono() || prop.getDono() != jogador) return false; // precisa ser do jogador
+        if (!prop.temDono() || prop.getDono() != jogador) return false;
         if (acabouDeComprarNestaQueda) return false;   // só em quedas subsequentes
         if (jaConstruiuNestaQueda) return false;        // 1 por queda
         if (!prop.podeConstruirCasa()) return false;    // 0..4 e sem hotel
@@ -243,15 +243,6 @@ public class GameModel {
         return true;
     }
 
-    /**
-     * Constrói UM hotel na propriedade onde o jogador da vez ACABOU DE CAIR,
-     * respeitando:
-     *  - Construções só em quedas subsequentes na MESMA propriedade (não na queda da compra).
-     *  - Apenas 1 imóvel por queda (casa OU hotel).
-     *  - Hotel requer pelo menos 1 casa e não pode já existir hotel.
-     *  - Saldo suficiente.
-     * @return true se a construção ocorreu.
-     */
     public boolean construirHotel() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -268,7 +259,7 @@ public class GameModel {
         if (!prop.temDono() || prop.getDono() != jogador) return false;
         if (acabouDeComprarNestaQueda) return false;
         if (jaConstruiuNestaQueda) return false;
-        if (!prop.podeConstruirHotel()) return false;   // requer >=1 casa e ainda não ter hotel
+        if (!prop.podeConstruirHotel()) return false;   // requer >=1 casa e sem hotel
 
         final int preco = prop.getPrecoHotel();
         if (preco <= 0 || jogador.getSaldo() < preco) return false;
@@ -279,6 +270,206 @@ public class GameModel {
 
         jaConstruiuNestaQueda = true;
         return true;
+    }
+
+    // =====================================================================================
+    //                       REGRA #5: ALUGUEL AUTOMÁTICO (≥1 CASA)
+    // =====================================================================================
+
+    public Transacao pagarAluguelSeDevido() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        final int idPagador = getJogadorDaVez();
+        final Jogador pagador = jogadores.get(idPagador);
+        final Casa casa = tabuleiro.getCasa(pagador.getPosicao());
+
+        if (!(casa instanceof Propriedade)) {
+            return Transacao.semEfeito("Casa atual não é propriedade", idPagador, pagador.getPosicao(), null, 0);
+        }
+
+        final Propriedade prop = (Propriedade) casa;
+
+        if (!prop.temDono()) {
+            return Transacao.semEfeito("Propriedade sem dono", idPagador, pagador.getPosicao(), null, 0);
+        }
+
+        final Jogador dono = prop.getDono();
+
+        if (dono == pagador) {
+            return Transacao.semEfeito("Propriedade do próprio jogador", idPagador, pagador.getPosicao(), dono.getId(), 0);
+        }
+
+        final boolean temEstruturaParaCobrar = (prop.getNumCasas() >= 1) || prop.temHotel();
+        if (!temEstruturaParaCobrar) {
+            return Transacao.semEfeito("Sem casas/hotel: não há aluguel na 1ª iteração", idPagador, pagador.getPosicao(), dono.getId(), 0);
+        }
+
+        final int valor = prop.calcularAluguelAtual();
+        if (valor <= 0) {
+            return Transacao.semEfeito("Aluguel calculado como zero", idPagador, pagador.getPosicao(), dono.getId(), 0);
+        }
+
+        pagador.debitar(valor);
+        dono.creditar(valor);
+
+        return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), valor);
+    }
+
+    public Transacao aplicarEfeitosObrigatoriosPosMovimento() {
+        return pagarAluguelSeDevido();
+    }
+
+    public Transacao deslocarPiaoEAplicarObrigatorios() {
+        deslocarPiao();
+        return aplicarEfeitosObrigatoriosPosMovimento();
+    }
+
+    // =====================================================================================
+    //                       REGRA #6: PRISÃO – API PÚBLICA
+    // =====================================================================================
+
+    public void enviarParaPrisao(int idJogador) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        final int idxPrisao = getIndicePrisaoOrThrow();
+        final Jogador j = jogadores.get(idJogador);
+        j.moverPara(idxPrisao);
+        j.setNaPrisao(true);
+        turno.resetarDuplas();
+    }
+
+    public boolean tentarSairDaPrisaoComDuplaOuCarta() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        final Jogador j = jogadores.get(getJogadorDaVez());
+        if (!j.isNaPrisao()) return false;
+
+        if (j.temCartaSaidaLivre()) {
+            j.setCartaSaidaLivre(false);
+            j.setNaPrisao(false);
+            turno.resetarDuplas();
+            return true;
+        }
+        if (turno.houveDupla()) {
+            j.setNaPrisao(false);
+            turno.resetarDuplas();
+            return true;
+        }
+        return false;
+    }
+
+    public boolean usarCartaSaidaLivre() {
+        exigirPartidaIniciada();
+        final Jogador j = jogadores.get(getJogadorDaVez());
+        if (!j.isNaPrisao()) return false;
+        if (!j.temCartaSaidaLivre()) return false;
+
+        j.setCartaSaidaLivre(false);
+        j.setNaPrisao(false);
+        turno.resetarDuplas();
+        return true;
+    }
+
+    public boolean estaNaPrisao(int idJogador) {
+        exigirPartidaIniciada();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        return jogadores.get(idJogador).isNaPrisao();
+    }
+
+    // =====================================================================================
+    //                       REGRA #7: LIQUIDAÇÃO E FALÊNCIA
+    // =====================================================================================
+
+    /**
+     * Vende ao banco a propriedade na posição informada, desde que pertença ao
+     * jogador da vez. O banco paga 90% do valor agregado (terreno + construções).
+     * A propriedade volta a não ter dono e perde as construções.
+     *
+     * @return true se a venda ocorreu; false caso contrário.
+     */
+    public boolean venderPropriedadeAoBanco(int posicaoPropriedade) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        final Jogador j = jogadores.get(getJogadorDaVez());
+        final Casa c = tabuleiro.getCasa(posicaoPropriedade);
+        if (!(c instanceof Propriedade)) return false;
+
+        final Propriedade p = (Propriedade) c;
+        if (!p.temDono() || p.getDono() != j) return false;
+
+        final int valorAgregado = p.valorAgregadoAtual();
+        final int pagamento = (valorAgregado * 9) / 10; // 90%
+
+        // banco paga, jogador recebe
+        banco.debitar(pagamento);
+        j.creditar(pagamento);
+
+        // propriedade volta para o banco (sem dono e sem construções)
+        p.resetarParaBanco();
+
+        return true;
+    }
+
+    /**
+     * Verifica se o jogador da vez está insolvente (saldo < 0). Se estiver,
+     * tenta liquidar automaticamente suas propriedades, das mais valiosas para
+     * as menos valiosas, até cobrir a dívida. Se, mesmo após vender tudo, o saldo
+     * permanecer < 0, o jogador é declarado falido e removido do jogo (inativo).
+     *
+     * @return true se o jogador foi declarado falido e removido; false caso contrário.
+     */
+    public boolean declararFalenciaSeNecessario() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        final Jogador j = jogadores.get(getJogadorDaVez());
+        if (!j.isAtivo()) return true; // já removido anteriormente
+        if (j.getSaldo() >= 0) return false;
+
+        // lista de propriedades do jogador, mais valiosas primeiro
+        List<Propriedade> minhas = listarPropriedadesDo(j);
+        minhas.sort(Comparator.comparingInt(Propriedade::valorAgregadoAtual).reversed());
+
+        for (Propriedade p : minhas) {
+            if (j.getSaldo() >= 0) break;
+            // realiza venda
+            final int pagamento = (p.valorAgregadoAtual() * 9) / 10;
+            banco.debitar(pagamento);
+            j.creditar(pagamento);
+            p.resetarParaBanco();
+        }
+
+        if (j.getSaldo() < 0) {
+            // não conseguiu cobrir: falência
+            j.falir();
+            // por segurança, garante que não resta nada em seu nome
+            for (Propriedade p : listarPropriedadesDo(j)) {
+                p.resetarParaBanco();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private List<Propriedade> listarPropriedadesDo(Jogador dono) {
+        List<Propriedade> props = new ArrayList<>();
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (c instanceof Propriedade) {
+                Propriedade p = (Propriedade) c;
+                if (p.temDono() && p.getDono() == dono) {
+                    props.add(p);
+                }
+            }
+        }
+        return props;
     }
 
     // =====================================================================================
@@ -304,11 +495,18 @@ public class GameModel {
         return banco.getSaldo();
     }
 
+    public boolean isJogadorAtivo(int idJogador) {
+        exigirPartidaIniciada();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        return jogadores.get(idJogador).isAtivo();
+    }
+
     // =====================================================================================
     //                          HELPERS DE TABULEIRO (para testes)
     // =====================================================================================
 
-    /** Cria tabuleiro simples com N casas genéricas. */
     public void carregarTabuleiroMinimoParaTeste(int nCasas) {
         if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
         List<Casa> casas = new ArrayList<>(nCasas);
@@ -318,21 +516,15 @@ public class GameModel {
         this.setTabuleiro(new Tabuleiro(casas));
     }
 
-    /**
-     * Helper: cria um tabuleiro com N casas genéricas e 1 Propriedade na posição indicada.
-     * Versão básica (preços de casa/hotel = 0).
-     */
     public void carregarTabuleiroDeTesteComUmaPropriedade(int nCasas, int idxPropriedade, int precoTerreno) {
         carregarTabuleiroDeTesteComUmaPropriedade(nCasas, idxPropriedade, precoTerreno, 0, 0);
     }
 
-    /** Helper: idem, informando preço de casa (hotel = 0). */
     public void carregarTabuleiroDeTesteComUmaPropriedade(int nCasas, int idxPropriedade,
                                                           int precoTerreno, int precoCasa) {
         carregarTabuleiroDeTesteComUmaPropriedade(nCasas, idxPropriedade, precoTerreno, precoCasa, 0);
     }
 
-    /** Helper: idem, informando preços de casa e hotel. */
     public void carregarTabuleiroDeTesteComUmaPropriedade(int nCasas, int idxPropriedade,
                                                           int precoTerreno, int precoCasa, int precoHotel) {
         if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
@@ -348,5 +540,111 @@ public class GameModel {
             }
         }
         this.setTabuleiro(new Tabuleiro(casas));
+    }
+
+    public void carregarTabuleiroDeTesteComUmaPropriedadeEAlugueis(
+            int nCasas, int idxPropriedade,
+            int precoTerreno, int precoCasa, int precoHotel,
+            int[] alugueis) {
+
+        if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
+        if (idxPropriedade < 0 || idxPropriedade >= nCasas) {
+            throw new IllegalArgumentException("Índice de propriedade fora do tabuleiro.");
+        }
+        List<Casa> casas = new ArrayList<>(nCasas);
+        for (int i = 0; i < nCasas; i++) {
+            if (i == idxPropriedade) {
+                casas.add(new Propriedade(i, "Propriedade " + i,
+                        precoTerreno, precoCasa, precoHotel, alugueis));
+            } else {
+                casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+            }
+        }
+        this.setTabuleiro(new Tabuleiro(casas));
+    }
+
+    public void carregarTabuleiroBasicoComPrisao(int nCasas, int idxPrisao, int idxVaParaPrisao) {
+        if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
+        if (idxPrisao < 0 || idxPrisao >= nCasas) throw new IllegalArgumentException("idxPrisao fora do tabuleiro.");
+        if (idxVaParaPrisao < 0 || idxVaParaPrisao >= nCasas) throw new IllegalArgumentException("idxVaParaPrisao fora do tabuleiro.");
+        List<Casa> casas = new ArrayList<>(nCasas);
+        for (int i = 0; i < nCasas; i++) {
+            if (i == idxPrisao) {
+                casas.add(new Casa(i, "Prisão", "PRISAO"));
+            } else if (i == idxVaParaPrisao) {
+                casas.add(new Casa(i, "Vá para a Prisão", "VA_PARA_PRISAO"));
+            } else {
+                casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+            }
+        }
+        this.setTabuleiro(new Tabuleiro(casas));
+    }
+
+    public void debugForcarPosicaoJogador(int idJogador, int posicao) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        if (posicao < 0 || posicao >= tabuleiro.tamanho()) {
+            throw new IllegalArgumentException("posicao fora do tabuleiro");
+        }
+        jogadores.get(idJogador).moverPara(posicao);
+        this.posicaoDaQuedaAtual = posicao; // simula que 'caiu' aqui
+    }
+
+    public void debugForcarDonoECasasDaPropriedade(int posicaoPropriedade, int idDono, int numCasas, boolean hotel) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        Casa c = tabuleiro.getCasa(posicaoPropriedade);
+        if (!(c instanceof Propriedade)) {
+            throw new IllegalArgumentException("Posição não é Propriedade");
+        }
+        Propriedade p = (Propriedade) c;
+
+        if (idDono < 0 || idDono >= jogadores.size()) {
+            throw new IllegalArgumentException("idDono inválido");
+        }
+        p.setDono(jogadores.get(idDono));
+
+        while (p.getNumCasas() < numCasas) {
+            if (!p.podeConstruirCasa()) break;
+            p.construirCasa();
+        }
+        if (hotel && p.podeConstruirHotel()) {
+            p.construirHotel();
+        }
+    }
+
+    public void debugDarCartaSaidaLivreAoJogador(int idJogador, boolean possui) {
+        exigirPartidaIniciada();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        jogadores.get(idJogador).setCartaSaidaLivre(possui);
+    }
+
+    // =====================================================================================
+    //                              SUPORTES INTERNOS
+    // =====================================================================================
+
+    private int getIndicePrisaoOrThrow() {
+        int idx = encontrarIndicePorTipo("PRISAO");
+        if (idx < 0) throw new IllegalStateException("Tabuleiro não possui casa PRISAO.");
+        return idx;
+    }
+
+    @SuppressWarnings("unused")
+    private int getIndiceVaParaPrisaoOrMinus1() {
+        return encontrarIndicePorTipo("VA_PARA_PRISAO");
+    }
+
+    private int encontrarIndicePorTipo(String tipo) {
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (tipo.equalsIgnoreCase(c.getTipo())) return i;
+        }
+        return -1;
     }
 }

@@ -18,4 +18,11 @@ final class Banco {
         if (valor < 0) throw new IllegalArgumentException("valor < 0");
         saldo += valor;
     }
+
+    /** Banco paga um valor (reduz saldo do banco). */
+    void debitar(int valor) {
+        if (valor < 0) throw new IllegalArgumentException("valor < 0");
+        if (saldo < valor) throw new IllegalStateException("Banco sem saldo suficiente");
+        saldo -= valor;
+    }
 }
