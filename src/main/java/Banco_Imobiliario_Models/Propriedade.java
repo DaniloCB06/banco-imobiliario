@@ -7,11 +7,15 @@ import java.util.Map;
 final class Propriedade extends Casa {
 
     private final int precoTerreno;       // preço para comprar o terreno
-    protected int precoCompraCasa;        // preço por casa (para próximas regras)
-    protected int precoCompraHotel;       // preço do hotel (para próximas regras)
+    protected int precoCompraCasa;        // preço por casa
+    protected int precoCompraHotel;       // preço do hotel
 
     private Jogador dono;                 // null = sem dono
     private Map<Integer, Integer> alugueis;
+
+    // ---- Estado de construções ----
+    private int numCasas = 0;             // 0..4
+    private boolean hotel = false;        // no máx. 1
 
     Propriedade(int posicao,
                 String nome,
@@ -33,14 +37,35 @@ final class Propriedade extends Casa {
     }
 
     int getPrecoTerreno() { return precoTerreno; }
+    int getPrecoCasa()    { return precoCompraCasa; }
+    int getPrecoHotel()   { return precoCompraHotel; }
 
     boolean temDono() { return dono != null; }
-
     Jogador getDono() { return dono; }
-
     void setDono(Jogador novoDono) { this.dono = novoDono; }
 
     int getAluguel(int numCasas) {
-        return alugueis.getOrDefault(numCasas, 0); // 0 sem casa; hotel pode usar chave 5
+        return alugueis.getOrDefault(numCasas, 0); // (hotel pode ser tratado depois)
+    }
+
+    int getNumCasas() { return numCasas; }
+    boolean temHotel() { return hotel; }
+
+    boolean podeConstruirCasa() {
+        // Até 4 casas, 1 por queda; se já houver hotel, não construímos mais casas nesta iteração
+        return !hotel && numCasas < 4;
+    }
+    void construirCasa() {
+        if (!podeConstruirCasa()) throw new IllegalStateException("Não é possível construir casa.");
+        numCasas++;
+    }
+
+    boolean podeConstruirHotel() {
+        // Hotel requer ao menos 1 casa e ainda não existir hotel
+        return !hotel && numCasas >= 1;
+    }
+    void construirHotel() {
+        if (!podeConstruirHotel()) throw new IllegalStateException("Não é possível construir hotel.");
+        hotel = true;
     }
 }
