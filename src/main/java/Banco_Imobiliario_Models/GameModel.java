@@ -7,7 +7,6 @@ import java.util.List;
  * Regras #1 e #2 (parcial):
  *  - Regra #1: lançar dados.
  *  - Regra #2: deslocar o peão do jogador da vez pelo valor dos dados.
- *
  */
 public class GameModel {
 
@@ -21,7 +20,20 @@ public class GameModel {
     private Integer ultimoD1 = null, ultimoD2 = null;
 
     private final List<Jogador> jogadores = new ArrayList<>();
-    private Tabuleiro tabuleiro; 
+    private Tabuleiro tabuleiro;
+
+    /** DTO da API para retorno de lançamento de dados (sem arrays). */
+    public static final class ResultadoDados {
+        private final int d1;
+        private final int d2;
+        public ResultadoDados(int d1, int d2) {
+            this.d1 = d1; this.d2 = d2;
+        }
+        public int getD1() { return d1; }
+        public int getD2() { return d2; }
+        public int getSoma() { return d1 + d2; }
+        public boolean isDupla() { return d1 == d2; }
+    }
 
     /**
      * Inicia uma nova partida. Validações mínimas.
@@ -37,7 +49,6 @@ public class GameModel {
 
         this.jogadores.clear();
         for (int i = 0; i < numJogadores; i++) {
-            // saldo não é relevante para esta regra (ainda), iniciamos com 4000
             this.jogadores.add(new Jogador(i, 4000));
         }
         this.ultimoD1 = this.ultimoD2 = null;
@@ -64,14 +75,15 @@ public class GameModel {
     }
 
     // ---------- Regra #1 (lançar dados) ----------
-    public int[] lancarDados() {
+    /** Agora retorna um objeto de resultado em vez de array. */
+    public ResultadoDados lancarDados() {
         exigirPartidaIniciada();
         int d1 = dado1.rolar(rng);
         int d2 = dado2.rolar(rng);
         turno.registrarLance(d1, d2);
         this.ultimoD1 = d1;
         this.ultimoD2 = d2;
-        return new int[]{ d1, d2 };
+        return new ResultadoDados(d1, d2);
     }
 
     public boolean houveDuplaNoUltimoLancamento() {
@@ -90,19 +102,9 @@ public class GameModel {
     }
 
     // ---------- Regra #2 (apenas deslocamento) ----------
-
     /**
      * Desloca o peão do jogador da vez pela soma do último lançamento.
-     * Pré-condições:
-     *  - Partida iniciada
-     *  - Tabuleiro carregado
-     *  - Deve haver um lançamento realizado (usa o último d1,d2)
-     *
-     * Efeitos:
-     *  - Atualiza a posição do jogador da vez conforme (pos + d1 + d2) % tamanhoTabuleiro
-     *  - NÃO aplica honorários, troca de turno, prisão ou efeitos de casa.
-     *
-     * @return ResultadoMovimento com (id, posAnterior, deslocamento, posAtual)
+     * NÃO aplica honorários, troca de turno, prisão ou efeitos de casa.
      */
     public ResultadoMovimento deslocarPiao() {
         exigirPartidaIniciada();
@@ -110,10 +112,8 @@ public class GameModel {
         if (ultimoD1 == null || ultimoD2 == null) {
             throw new IllegalStateException("É necessário lançar os dados antes de deslocar.");
         }
-
         final int id = getJogadorDaVez();
         final Jogador j = jogadores.get(id);
-
         return Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
     }
 
@@ -127,16 +127,15 @@ public class GameModel {
         exigirTabuleiroCarregado();
         return tabuleiro.tamanho();
     }
-    
-    
+
     // --------- APENAS PARA TESTES ----------
-    
     public void carregarTabuleiroMinimoParaTeste(int nCasas) {
         if (nCasas <= 0) throw new IllegalArgumentException("nCasas deve ser > 0");
-        // monta internamente usando as classes package-private
-        java.util.List<Casa> casas = new java.util.ArrayList<>();
-        for (int i = 0; i < nCasas; i++) casas.add(new Casa());
+        List<Casa> casas = new ArrayList<>(nCasas);
+        for (int i = 0; i < nCasas; i++) {
+            // Compatível com Casa(int posicao, String nome, String tipo)
+            casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+        }
         this.setTabuleiro(new Tabuleiro(casas));
     }
-
 }

@@ -1,7 +1,7 @@
 package Banco_Imobiliario_Models;
 
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 public class Propriedade extends Casa {
     protected int precoCompraCasa;
@@ -19,7 +19,7 @@ public class Propriedade extends Casa {
         // Preenche os valores de aluguel
         for (int i = 0; i < valoresAluguel.length; i++) {
             alugueis.put(i, valoresAluguel[i]);
-        }x
+        }
     }
 
     public int getAluguel(int numCasas) {

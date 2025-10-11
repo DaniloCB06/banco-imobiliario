@@ -48,8 +48,8 @@ public class MovimentoTest {
         // posição inicial do jogador 0 é 0
         assertEquals(0, game.getPosicaoJogador(0));
 
-        int[] roll = game.lancarDados();
-        int soma = roll[0] + roll[1];
+        GameModel.ResultadoDados roll = game.lancarDados();
+        int soma = roll.getSoma();
 
         game.deslocarPiao();
 
@@ -66,8 +66,8 @@ public class MovimentoTest {
         int soma = -1;
         // tenta até conseguir uma soma >= N
         for (int i = 0; i < 200; i++) {
-            int[] r = game.lancarDados();
-            soma = r[0] + r[1];
+            GameModel.ResultadoDados r = game.lancarDados();
+            soma = r.getSoma();
             if (soma >= N) break;
         }
         if (soma < N) {
@@ -85,11 +85,11 @@ public class MovimentoTest {
         final int N = 40;
         game.carregarTabuleiroMinimoParaTeste(N);
 
-        int[] r1 = game.lancarDados();
-        int soma1 = r1[0] + r1[1];
+        GameModel.ResultadoDados r1 = game.lancarDados();
+        int soma1 = r1.getSoma();
 
-        int[] r2 = game.lancarDados();
-        int soma2 = r2[0] + r2[1];
+        GameModel.ResultadoDados r2 = game.lancarDados();
+        int soma2 = r2.getSoma();
 
         game.deslocarPiao();
 
@@ -97,7 +97,7 @@ public class MovimentoTest {
         assertEquals("Deslocamento deve usar o último lançamento realizado",
                      soma2 % N, game.getPosicaoJogador(0));
 
-        // check quando as somas diferem
+        // sanity check quando as somas diferem
         if (soma1 != soma2) {
             int posNaoEsperada = soma1 % N;
             int posAtual = game.getPosicaoJogador(0);

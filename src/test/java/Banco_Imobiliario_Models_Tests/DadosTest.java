@@ -1,6 +1,5 @@
 package Banco_Imobiliario_Models_Tests;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -24,10 +23,9 @@ public class DadosTest {
     @Test
     public void deveRetornarDoisValoresEntre1e6() {
         for (int i = 0; i < 100; i++) {
-            int[] r = game.lancarDados();
-            assertEquals("Devem existir exatamente 2 valores", 2, r.length);
-            assertTrue("d1 deve estar em [1..6]", r[0] >= 1 && r[0] <= 6);
-            assertTrue("d2 deve estar em [1..6]", r[1] >= 1 && r[1] <= 6);
+            GameModel.ResultadoDados r = game.lancarDados();
+            assertTrue("d1 deve estar em [1..6]", r.getD1() >= 1 && r.getD1() <= 6);
+            assertTrue("d2 deve estar em [1..6]", r.getD2() >= 1 && r.getD2() <= 6);
         }
     }
 
@@ -36,9 +34,9 @@ public class DadosTest {
         boolean encontrouDupla = false;
 
         for (int i = 0; i < 300; i++) {
-            int[] r = game.lancarDados();
+            GameModel.ResultadoDados r = game.lancarDados();
 
-            if (r[0] == r[1]) {
+            if (r.isDupla()) {
                 // Houve dupla neste lançamento
                 assertTrue("API deve sinalizar que houve dupla",
                            game.houveDuplaNoUltimoLancamento());
@@ -58,8 +56,8 @@ public class DadosTest {
         // 1) Primeiro, encontre uma dupla
         boolean achouDupla = false;
         for (int i = 0; i < 500 && !achouDupla; i++) {
-            int[] r = game.lancarDados();
-            achouDupla = (r[0] == r[1]);
+            GameModel.ResultadoDados r = game.lancarDados();
+            achouDupla = r.isDupla();
         }
         assertTrue("Precisamos de pelo menos uma dupla para testar o reset",
                    achouDupla);
@@ -67,8 +65,8 @@ public class DadosTest {
         // 2) Agora role até sair um não-dupla e verifique o reset
         boolean saiuNaoDupla = false;
         for (int j = 0; j < 200; j++) {
-            int[] r2 = game.lancarDados();
-            if (r2[0] != r2[1]) {
+            GameModel.ResultadoDados r2 = game.lancarDados();
+            if (!r2.isDupla()) {
                 saiuNaoDupla = true;
                 break;
             }
@@ -91,10 +89,10 @@ public class DadosTest {
         g2.novaPartida(2, 123L);
 
         for (int i = 0; i < 50; i++) {
-            int[] a = g1.lancarDados();
-            int[] b = g2.lancarDados();
-            assertArrayEquals("Com mesma seed, lançamentos devem ser idênticos",
-                              a, b);
+            GameModel.ResultadoDados a = g1.lancarDados();
+            GameModel.ResultadoDados b = g2.lancarDados();
+            assertEquals("d1 deve coincidir com a mesma seed", a.getD1(), b.getD1());
+            assertEquals("d2 deve coincidir com a mesma seed", a.getD2(), b.getD2());
         }
     }
 }
