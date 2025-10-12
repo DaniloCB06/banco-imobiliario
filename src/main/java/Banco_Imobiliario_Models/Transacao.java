@@ -40,15 +40,4 @@ public class Transacao {
     public int getPosicaoPropriedade() { return posicaoPropriedade; }
     public int getValor() { return valor; }
     public String getMotivo() { return motivo; }
-
-    @Override
-    public String toString() {
-        if (efetuada) {
-            return "Transacao{tipo=" + tipo + ", pagador=" + pagadorId +
-                   ", recebedor=" + recebedorId + ", posicao=" + posicaoPropriedade +
-                   ", valor=" + valor + "}";
-        }
-        return "Transacao{tipo=" + tipo + ", motivo='" + motivo + "', pagador=" +
-               pagadorId + ", recebedor=" + recebedorId + ", posicao=" + posicaoPropriedade + "}";
-    }
 }
