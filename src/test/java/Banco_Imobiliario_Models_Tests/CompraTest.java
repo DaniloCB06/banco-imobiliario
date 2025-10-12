@@ -73,4 +73,37 @@ public class CompraTest {
         assertEquals(destino % nCasas, game.getPosicaoJogador(game.getJogadorDaVez()));
         assertFalse(game.comprarPropriedade());
     }
+    
+    @Test
+    public void naoDeveComprarPropriedadeQueJaTemDono() {
+        game.novaPartida(2, 456L);
+
+        GameModel.ResultadoDados rd = game.lancarDados();
+        int destino = rd.getSoma();
+        int nCasas = 40;
+
+        // Cria tabuleiro com a PROPRIEDADE exatamente onde o jogador cairá
+        game.carregarTabuleiroDeTesteComUmaPropriedade(nCasas, destino, 300);
+
+        // Marca a propriedade como já tendo dono (jogador 1), sem casas
+        game.debugForcarDonoECasasDaPropriedade(destino, 1, 0, false);
+
+        // Move jogador 0 até a propriedade
+        game.deslocarPiao();
+        assertEquals(destino % nCasas, game.getPosicaoJogador(game.getJogadorDaVez()));
+
+        // Saldos antes da tentativa (ninguém deve ser afetado)
+        int saldoBancoAntes = game.getSaldoBanco();
+        int saldoJ0Antes = game.getSaldoJogador(0);
+        int saldoJ1Antes = game.getSaldoJogador(1);
+
+        // Tentativa de compra deve falhar porque já tem dono
+        assertFalse(game.comprarPropriedade());
+
+        // Saldos inalterados (sem efeitos colaterais)
+        assertEquals(saldoBancoAntes, game.getSaldoBanco());
+        assertEquals(saldoJ0Antes, game.getSaldoJogador(0));
+        assertEquals(saldoJ1Antes, game.getSaldoJogador(1));
+    }
+    
 }
