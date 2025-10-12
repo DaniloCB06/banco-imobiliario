@@ -8,6 +8,14 @@ import org.junit.Test;
 
 import Banco_Imobiliario_Models.GameModel;
 
+/**
+ * Iteração 1 – Regra #2 (parcial – Movimento):
+ * - Deslocamento pela soma dos dados (módulo tamanho do tabuleiro);
+ * - Wrap ao ultrapassar a última casa;
+ * - Usa sempre o último lançamento;
+ * - Pré-condições: tabuleiro carregado e dados lançados.
+ */
+
 public class MovimentoTest {
 
     private GameModel game;
@@ -15,29 +23,19 @@ public class MovimentoTest {
     @Before
     public void setUp() {
         game = new GameModel();
-        game.novaPartida(2, 42L); // 2 jogadores, seed fixa
+        game.novaPartida(2, 42L);
     }
 
-    @Test
+    @Test(expected = IllegalStateException.class)
     public void deveRecusarDeslocarSemTabuleiroCarregado() {
         game.lancarDados();
-        try {
-            game.deslocarPiao();
-            fail("Esperava IllegalStateException por tabuleiro não carregado.");
-        } catch (IllegalStateException expected) {
-            // ok
-        }
+        game.deslocarPiao();
     }
 
-    @Test
+    @Test(expected = IllegalStateException.class)
     public void deveRecusarDeslocarSemLancarDadosAntes() {
         game.carregarTabuleiroMinimoParaTeste(10);
-        try {
-            game.deslocarPiao();
-            fail("Esperava IllegalStateException por ainda não ter lançado os dados.");
-        } catch (IllegalStateException expected) {
-            // ok
-        }
+        game.deslocarPiao();
     }
 
     @Test
@@ -45,7 +43,6 @@ public class MovimentoTest {
         final int N = 12;
         game.carregarTabuleiroMinimoParaTeste(N);
 
-        // posição inicial do jogador 0 é 0
         assertEquals(0, game.getPosicaoJogador(0));
 
         GameModel.ResultadoDados roll = game.lancarDados();
@@ -53,31 +50,27 @@ public class MovimentoTest {
 
         game.deslocarPiao();
 
-        int esperado = soma % N; // pos inicial era 0
-        assertEquals("Posição após deslocar deve ser (pos + d1 + d2) % N",
-                     esperado, game.getPosicaoJogador(0));
+        int esperado = soma % N;
+        assertEquals(esperado, game.getPosicaoJogador(0));
     }
 
     @Test
     public void deveFazerWrapAoUltrapassarUltimaCasa() {
-        final int N = 5; // pequeno para facilitar wrap
+        final int N = 5;
         game.carregarTabuleiroMinimoParaTeste(N);
 
         int soma = -1;
-        // tenta até conseguir uma soma >= N
         for (int i = 0; i < 200; i++) {
             GameModel.ResultadoDados r = game.lancarDados();
             soma = r.getSoma();
             if (soma >= N) break;
         }
-        if (soma < N) {
-            fail("Não saiu um lançamento com soma >= N em 200 tentativas (improvável).");
-        }
+        if (soma < N) fail("Não saiu soma >= N em 200 tentativas.");
 
         game.deslocarPiao();
 
-        int esperado = soma % N; // pos inicial 0
-        assertEquals("Deve ter dado wrap (uso de módulo)", esperado, game.getPosicaoJogador(0));
+        int esperado = soma % N;
+        assertEquals(esperado, game.getPosicaoJogador(0));
     }
 
     @Test
@@ -93,16 +86,13 @@ public class MovimentoTest {
 
         game.deslocarPiao();
 
-        // posição inicial 0 -> deve ser igual à soma do ÚLTIMO lançamento
-        assertEquals("Deslocamento deve usar o último lançamento realizado",
-                     soma2 % N, game.getPosicaoJogador(0));
+        assertEquals(soma2 % N, game.getPosicaoJogador(0));
 
-        // sanity check quando as somas diferem
         if (soma1 != soma2) {
             int posNaoEsperada = soma1 % N;
             int posAtual = game.getPosicaoJogador(0);
             if (posNaoEsperada == posAtual) {
-                fail("Usou a soma do penúltimo lançamento em vez do último.");
+                fail("Usou a soma do penúltimo lançamento.");
             }
         }
     }

@@ -5,44 +5,38 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * API pública do Model (Iteração 1)
- *
- * Regras cobertas: #1, #2 (parcial), #3, #4, #5, #6 e #7 (pagamento, liquidação e falência).
- *
- * Observações:
- *  - Todas as classes fora GameModel permanecem não públicas.
- *  - Sem trocas/hipoteca; liquidez via venda ao banco por 90% do agregado.
+ * API pública do Model (Iteração 1).
+ * 
+ * Regras cobertas: #1, #2, #3, #4, #5, #6, #7.
  */
 public class GameModel {
 
-    // ----- Regra #1 -----
+    // =====================================================================================
+    // ESTADO GLOBAL
+    // =====================================================================================
+
     private RandomProvider rng;
     private final Dado dado1 = new Dado();
     private final Dado dado2 = new Dado();
     private Turno turno;
-
-    // Banco (software como banqueiro, saldo inicial 200_000)
     private Banco banco;
-
-    // Último lançamento (para deslocamento)
-    private Integer ultimoD1 = null, ultimoD2 = null;
-
-    // ---- CONTEXTO DA QUEDA (para construir na mesma casa onde caiu) ----
-    private Integer posicaoDaQuedaAtual = null; // posição onde o peão parou no último deslocamento
-    private boolean jaConstruiuNestaQueda = false;
-    private boolean acabouDeComprarNestaQueda = false;
-
-    // Sinaliza que o último lançamento configurou 3ª dupla consecutiva (vai para prisão)
-    private boolean deveIrParaPrisaoPorTerceiraDupla = false;
-
-    // Estado do jogo
     private final List<Jogador> jogadores = new ArrayList<>();
     private Tabuleiro tabuleiro;
 
-    /** DTO de retorno do lançamento de dados (sem arrays). */
+    // Lançamento corrente
+    private Integer ultimoD1 = null, ultimoD2 = null;
+
+    // Contexto da queda (para permitir construir na casa em que caiu)
+    private Integer posicaoDaQuedaAtual = null;
+    private boolean jaConstruiuNestaQueda = false;
+    private boolean acabouDeComprarNestaQueda = false;
+
+    // Sinalização de 3ª dupla consecutiva
+    private boolean deveIrParaPrisaoPorTerceiraDupla = false;
+
+    /** DTO imutável para resultado dos dados. */
     public static final class ResultadoDados {
-        private final int d1;
-        private final int d2;
+        private final int d1, d2;
         public ResultadoDados(int d1, int d2) { this.d1 = d1; this.d2 = d2; }
         public int getD1() { return d1; }
         public int getD2() { return d2; }
@@ -51,7 +45,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                                     SETUP
+    // SETUP
     // =====================================================================================
 
     public void novaPartida(int numJogadores, Long seedOpcional) {
@@ -59,7 +53,7 @@ public class GameModel {
             throw new IllegalArgumentException("Número de jogadores deve estar entre 2 e 6.");
         }
         this.rng = new RandomProvider(seedOpcional);
-        this.turno = new Turno(0); // ordem fixa nesta iteração
+        this.turno = new Turno(0);
         this.banco = new Banco(200_000);
 
         this.jogadores.clear();
@@ -97,8 +91,14 @@ public class GameModel {
         this.acabouDeComprarNestaQueda = false;
     }
 
+    private void iniciarContextoDeQueda(int pos) {
+        this.posicaoDaQuedaAtual = pos;
+        this.jaConstruiuNestaQueda = false;
+        this.acabouDeComprarNestaQueda = false;
+    }
+
     // =====================================================================================
-    //                                REGRA #1: DADOS
+    // REGRA #1 — LANÇAR DADOS
     // =====================================================================================
 
     public ResultadoDados lancarDados() {
@@ -131,8 +131,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                          REGRA #2 (PARCIAL): DESLOCAMENTO
-    //                        + ENTRADA/SAÍDA de PRISÃO (Regra #6)
+    // REGRA #2 (PARCIAL) — DESLOCAMENTO + REGRA #6 — PRISÃO
     // =====================================================================================
 
     public ResultadoMovimento deslocarPiao() {
@@ -141,50 +140,46 @@ public class GameModel {
         if (ultimoD1 == null || ultimoD2 == null) {
             throw new IllegalStateException("É necessário lançar os dados antes de deslocar.");
         }
+
         final int id = getJogadorDaVez();
         final Jogador j = jogadores.get(id);
 
+        // Terceira dupla: vai para a prisão imediatamente
         if (deveIrParaPrisaoPorTerceiraDupla) {
             int posAnt = j.getPosicao();
             enviarParaPrisao(id);
             deveIrParaPrisaoPorTerceiraDupla = false;
             turno.resetarDuplas();
-            this.posicaoDaQuedaAtual = j.getPosicao();
-            this.jaConstruiuNestaQueda = false;
-            this.acabouDeComprarNestaQueda = false;
+            iniciarContextoDeQueda(j.getPosicao());
             return new ResultadoMovimento(id, posAnt, 0, j.getPosicao());
         }
 
+        // Se está preso, tenta sair com dupla ou carta
         if (j.isNaPrisao()) {
             boolean saiu = tentarSairDaPrisaoComDuplaOuCarta();
             if (!saiu) {
-                this.posicaoDaQuedaAtual = j.getPosicao();
-                this.jaConstruiuNestaQueda = false;
-                this.acabouDeComprarNestaQueda = false;
+                iniciarContextoDeQueda(j.getPosicao());
                 return new ResultadoMovimento(id, j.getPosicao(), 0, j.getPosicao());
             }
         }
 
+        // Movimento regular
         ResultadoMovimento r = Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
+        iniciarContextoDeQueda(j.getPosicao());
 
-        this.posicaoDaQuedaAtual = j.getPosicao();
-        this.jaConstruiuNestaQueda = false;
-        this.acabouDeComprarNestaQueda = false;
-
+        // Casa "Vá para a Prisão"
         Casa casaAtual = tabuleiro.getCasa(j.getPosicao());
         if ("VA_PARA_PRISAO".equalsIgnoreCase(casaAtual.getTipo())) {
             int posAnt = j.getPosicao();
             enviarParaPrisao(id);
-            this.posicaoDaQuedaAtual = j.getPosicao();
-            this.jaConstruiuNestaQueda = false;
-            this.acabouDeComprarNestaQueda = false;
+            iniciarContextoDeQueda(j.getPosicao());
             return new ResultadoMovimento(id, posAnt, 0, j.getPosicao());
         }
         return r;
     }
 
     // =====================================================================================
-    //                       REGRA #3: COMPRAR PROPRIEDADE SEM DONO
+    // REGRA #3 — COMPRAR PROPRIEDADE SEM DONO
     // =====================================================================================
 
     public boolean comprarPropriedade() {
@@ -199,8 +194,7 @@ public class GameModel {
         if (prop.temDono()) return false;
 
         final int preco = prop.getPrecoTerreno();
-        if (preco <= 0) return false;
-        if (jogador.getSaldo() < preco) return false;
+        if (preco <= 0 || jogador.getSaldo() < preco) return false;
 
         jogador.debitar(preco);
         banco.creditar(preco);
@@ -211,26 +205,25 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                       REGRA #4: CONSTRUÇÕES (CASA / HOTEL)
+    // REGRA #4 — CONSTRUÇÕES (CASA / HOTEL)
     // =====================================================================================
 
     public boolean construirCasa() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
-
         if (posicaoDaQuedaAtual == null) return false;
 
         final Jogador jogador = jogadores.get(getJogadorDaVez());
-        if (jogador.getPosicao() != posicaoDaQuedaAtual.intValue()) return false;
+        if (jogador.getPosicao() != posicaoDaQuedaAtual) return false;
 
         final Casa casa = tabuleiro.getCasa(jogador.getPosicao());
         if (!(casa instanceof Propriedade)) return false;
 
         final Propriedade prop = (Propriedade) casa;
         if (!prop.temDono() || prop.getDono() != jogador) return false;
-        if (acabouDeComprarNestaQueda) return false;   // só em quedas subsequentes
-        if (jaConstruiuNestaQueda) return false;        // 1 por queda
-        if (!prop.podeConstruirCasa()) return false;    // 0..4 e sem hotel
+        if (acabouDeComprarNestaQueda) return false;   // apenas em quedas subsequentes
+        if (jaConstruiuNestaQueda) return false;        // uma construção por queda
+        if (!prop.podeConstruirCasa()) return false;    // 0..4 casas e sem hotel
 
         final int preco = prop.getPrecoCasa();
         if (preco <= 0 || jogador.getSaldo() < preco) return false;
@@ -246,11 +239,10 @@ public class GameModel {
     public boolean construirHotel() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
-
         if (posicaoDaQuedaAtual == null) return false;
 
         final Jogador jogador = jogadores.get(getJogadorDaVez());
-        if (jogador.getPosicao() != posicaoDaQuedaAtual.intValue()) return false;
+        if (jogador.getPosicao() != posicaoDaQuedaAtual) return false;
 
         final Casa casa = tabuleiro.getCasa(jogador.getPosicao());
         if (!(casa instanceof Propriedade)) return false;
@@ -259,7 +251,7 @@ public class GameModel {
         if (!prop.temDono() || prop.getDono() != jogador) return false;
         if (acabouDeComprarNestaQueda) return false;
         if (jaConstruiuNestaQueda) return false;
-        if (!prop.podeConstruirHotel()) return false;   // requer >=1 casa e sem hotel
+        if (!prop.podeConstruirHotel()) return false;   // requer ≥1 casa e sem hotel
 
         final int preco = prop.getPrecoHotel();
         if (preco <= 0 || jogador.getSaldo() < preco) return false;
@@ -273,7 +265,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                       REGRA #5: ALUGUEL AUTOMÁTICO (≥1 CASA)
+    // REGRA #5 — ALUGUEL AUTOMÁTICO (somente se ≥1 casa/hotel)
     // =====================================================================================
 
     public Transacao pagarAluguelSeDevido() {
@@ -289,20 +281,18 @@ public class GameModel {
         }
 
         final Propriedade prop = (Propriedade) casa;
-
         if (!prop.temDono()) {
             return Transacao.semEfeito("Propriedade sem dono", idPagador, pagador.getPosicao(), null, 0);
         }
 
         final Jogador dono = prop.getDono();
-
         if (dono == pagador) {
             return Transacao.semEfeito("Propriedade do próprio jogador", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
-        final boolean temEstruturaParaCobrar = (prop.getNumCasas() >= 1) || prop.temHotel();
-        if (!temEstruturaParaCobrar) {
-            return Transacao.semEfeito("Sem casas/hotel: não há aluguel na 1ª iteração", idPagador, pagador.getPosicao(), dono.getId(), 0);
+        final boolean cobra = (prop.getNumCasas() >= 1) || prop.temHotel();
+        if (!cobra) {
+            return Transacao.semEfeito("Sem casas/hotel na 1ª iteração", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
         final int valor = prop.calcularAluguelAtual();
@@ -312,7 +302,6 @@ public class GameModel {
 
         pagador.debitar(valor);
         dono.creditar(valor);
-
         return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), valor);
     }
 
@@ -326,7 +315,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                       REGRA #6: PRISÃO – API PÚBLICA
+    // REGRA #6 — PRISÃO (API)
     // =====================================================================================
 
     public void enviarParaPrisao(int idJogador) {
@@ -365,8 +354,7 @@ public class GameModel {
     public boolean usarCartaSaidaLivre() {
         exigirPartidaIniciada();
         final Jogador j = jogadores.get(getJogadorDaVez());
-        if (!j.isNaPrisao()) return false;
-        if (!j.temCartaSaidaLivre()) return false;
+        if (!j.isNaPrisao() || !j.temCartaSaidaLivre()) return false;
 
         j.setCartaSaidaLivre(false);
         j.setNaPrisao(false);
@@ -383,16 +371,9 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                       REGRA #7: LIQUIDAÇÃO E FALÊNCIA
+    // REGRA #7 — LIQUIDAÇÃO E FALÊNCIA
     // =====================================================================================
 
-    /**
-     * Vende ao banco a propriedade na posição informada, desde que pertença ao
-     * jogador da vez. O banco paga 90% do valor agregado (terreno + construções).
-     * A propriedade volta a não ter dono e perde as construções.
-     *
-     * @return true se a venda ocorreu; false caso contrário.
-     */
     public boolean venderPropriedadeAoBanco(int posicaoPropriedade) {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -407,39 +388,26 @@ public class GameModel {
         final int valorAgregado = p.valorAgregadoAtual();
         final int pagamento = (valorAgregado * 9) / 10; // 90%
 
-        // banco paga, jogador recebe
-        banco.debitar(pagamento);
+        banco.debitar(pagamento); // banco paga
         j.creditar(pagamento);
-
-        // propriedade volta para o banco (sem dono e sem construções)
-        p.resetarParaBanco();
-
+        p.resetarParaBanco(); // sem dono e sem construções
         return true;
     }
 
-    /**
-     * Verifica se o jogador da vez está insolvente (saldo < 0). Se estiver,
-     * tenta liquidar automaticamente suas propriedades, das mais valiosas para
-     * as menos valiosas, até cobrir a dívida. Se, mesmo após vender tudo, o saldo
-     * permanecer < 0, o jogador é declarado falido e removido do jogo (inativo).
-     *
-     * @return true se o jogador foi declarado falido e removido; false caso contrário.
-     */
     public boolean declararFalenciaSeNecessario() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
 
         final Jogador j = jogadores.get(getJogadorDaVez());
-        if (!j.isAtivo()) return true; // já removido anteriormente
+        if (!j.isAtivo()) return true;
         if (j.getSaldo() >= 0) return false;
 
-        // lista de propriedades do jogador, mais valiosas primeiro
+        // Liquida do maior valor agregado para o menor
         List<Propriedade> minhas = listarPropriedadesDo(j);
         minhas.sort(Comparator.comparingInt(Propriedade::valorAgregadoAtual).reversed());
 
         for (Propriedade p : minhas) {
             if (j.getSaldo() >= 0) break;
-            // realiza venda
             final int pagamento = (p.valorAgregadoAtual() * 9) / 10;
             banco.debitar(pagamento);
             j.creditar(pagamento);
@@ -447,9 +415,7 @@ public class GameModel {
         }
 
         if (j.getSaldo() < 0) {
-            // não conseguiu cobrir: falência
             j.falir();
-            // por segurança, garante que não resta nada em seu nome
             for (Propriedade p : listarPropriedadesDo(j)) {
                 p.resetarParaBanco();
             }
@@ -473,7 +439,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                       CONSULTAS ÚTEIS (apoio aos testes)
+    // CONSULTAS (apoio a testes)
     // =====================================================================================
 
     public int getPosicaoJogador(int idJogador) {
@@ -504,7 +470,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                          HELPERS DE TABULEIRO (para testes)
+    // HELPERS DE TABULEIRO (para testes)
     // =====================================================================================
 
     public void carregarTabuleiroMinimoParaTeste(int nCasas) {
@@ -626,7 +592,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    //                              SUPORTES INTERNOS
+    // SUPORTES INTERNOS
     // =====================================================================================
 
     private int getIndicePrisaoOrThrow() {
