@@ -658,7 +658,6 @@ public class GameModel {
             p.resetarParaBanco();
         }
         j.falir(); // marca inativo / fora do jogo
-        // (Se houver alguma política adicional de turno para pular jogadores inativos, o Turno deve cuidar disso.)
     }
     
 }
