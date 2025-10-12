@@ -295,14 +295,35 @@ public class GameModel {
             return Transacao.semEfeito("Sem casas/hotel na 1ª iteração", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
-        final int valor = prop.calcularAluguelAtual();
-        if (valor <= 0) {
+        final int aluguel = prop.calcularAluguelAtual();
+        if (aluguel <= 0) {
             return Transacao.semEfeito("Aluguel calculado como zero", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
-        pagador.debitar(valor);
-        dono.creditar(valor);
-        return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), valor);
+        // 1) Se não há saldo suficiente, tenta levantar fundos vendendo ao banco (90%)
+        if (pagador.getSaldo() < aluguel) {
+            tentarLevantarFundosPara(pagador, aluguel);
+        }
+
+        // 2) Reavalia: conseguiu cobrir?
+        if (pagador.getSaldo() >= aluguel) {
+            pagador.debitar(aluguel);
+            dono.creditar(aluguel);
+            return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), aluguel);
+        }
+
+        // 3) Não conseguiu cobrir: paga tudo que tem ao dono e falência
+        int disponivel = Math.max(0, pagador.getSaldo());
+        if (disponivel > 0) {
+            pagador.debitar(disponivel); // zera o saldo
+            dono.creditar(disponivel);   // dono recebe o que havia em caixa
+        }
+
+        // Executa a falência (remove jogador e devolve propriedades ao banco)
+        executarFalencia(pagador);
+
+        // Registramos a transação com o valor efetivamente pago (parcial)
+        return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), disponivel);
     }
 
     public Transacao aplicarEfeitosObrigatoriosPosMovimento() {
@@ -613,4 +634,31 @@ public class GameModel {
         }
         return -1;
     }
+    
+    /** Vende propriedades ao banco (90%) até que o jogador alcance 'valorNecessario' ou acabe o que vender. */
+    private void tentarLevantarFundosPara(Jogador j, int valorNecessario) {
+        if (j.getSaldo() >= valorNecessario) return;
+        List<Propriedade> minhas = listarPropriedadesDo(j);
+        // vender do maior valor agregado para o menor
+        minhas.sort(Comparator.comparingInt(Propriedade::valorAgregadoAtual).reversed());
+        for (Propriedade p : minhas) {
+            if (j.getSaldo() >= valorNecessario) break;
+            final int pagamento = (p.valorAgregadoAtual() * 9) / 10; // 90%
+            // Banco paga ao jogador e a propriedade volta ao banco
+            banco.debitar(pagamento);
+            j.creditar(pagamento);
+            p.resetarParaBanco();
+        }
+    }
+
+    /** Marca falência, remove o jogador do jogo e devolve todas as propriedades ao banco. */
+    private void executarFalencia(Jogador j) {
+        // devolve quaisquer propriedades restantes ao banco
+        for (Propriedade p : listarPropriedadesDo(j)) {
+            p.resetarParaBanco();
+        }
+        j.falir(); // marca inativo / fora do jogo
+        // (Se houver alguma política adicional de turno para pular jogadores inativos, o Turno deve cuidar disso.)
+    }
+    
 }
