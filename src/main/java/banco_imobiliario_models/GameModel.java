@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * API pública do Model (Iteração 1).
- * 
+ *
  * Regras cobertas: #1, #2, #3, #4, #5, #6, #7.
  */
 public class GameModel {
@@ -53,7 +53,7 @@ public class GameModel {
             throw new IllegalArgumentException("Número de jogadores deve estar entre 2 e 6.");
         }
         this.rng = new RandomProvider(seedOpcional);
-        this.turno = new Turno(0);
+        this.turno = new Turno(numJogadores); // << usa ordem padrão 0..N-1
         this.banco = new Banco(200_000);
 
         this.jogadores.clear();
@@ -115,6 +115,22 @@ public class GameModel {
         return new ResultadoDados(d1, d2);
     }
 
+    /** NOVO: para testes – força os valores dos dados (1..6) sem random. */
+    public ResultadoDados lancarDadosForcado(int d1, int d2) {
+        exigirPartidaIniciada();
+        if (d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
+            throw new IllegalArgumentException("Valores dos dados devem estar entre 1 e 6.");
+        }
+        turno.registrarLance(d1, d2);
+        this.ultimoD1 = d1;
+        this.ultimoD2 = d2;
+
+        if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
+            this.deveIrParaPrisaoPorTerceiraDupla = true;
+        }
+        return new ResultadoDados(d1, d2);
+    }
+
     public boolean houveDuplaNoUltimoLancamento() {
         exigirPartidaIniciada();
         return turno.houveDupla();
@@ -127,7 +143,24 @@ public class GameModel {
 
     public int getJogadorDaVez() {
         exigirPartidaIniciada();
-        return turno.getJogadorDaVez();
+        return turno.getJogadorDaVez(); // << já segue a ordem definida
+    }
+
+    /** NOVO: finaliza a vez – só avança se NÃO houver dupla.
+     *  Caso de 3ª dupla: o deslocamento envia à prisão e reseta a contagem,
+     *  logo aqui a vez avança normalmente. */
+    public void encerrarAcoesDaVezEPassarTurno() {
+        exigirPartidaIniciada();
+        boolean dupla = turno.houveDupla();
+        int consecutivas = turno.getDuplasConsecutivas();
+        if (dupla && consecutivas > 0) {
+            // dupla comum -> mesma pessoa continua
+            return;
+        }
+        // sem dupla (ou 3ª dupla já resolvida) -> próximo jogador da ORDEM
+        turno.passarVez(); // << agora sem parâmetro
+        limparContextoDeQueda();
+        this.ultimoD1 = this.ultimoD2 = null;
     }
 
     // =====================================================================================
@@ -634,7 +667,7 @@ public class GameModel {
         }
         return -1;
     }
-    
+
     /** Vende propriedades ao banco (90%) até que o jogador alcance 'valorNecessario' ou acabe o que vender. */
     private void tentarLevantarFundosPara(Jogador j, int valorNecessario) {
         if (j.getSaldo() >= valorNecessario) return;
@@ -660,4 +693,20 @@ public class GameModel {
         j.falir(); // marca inativo / fora do jogo
     }
     
+    public void definirOrdemJogadores(List<Integer> ordem) {
+        exigirPartidaIniciada();
+        if (ordem == null || ordem.size() != jogadores.size()) {
+            throw new IllegalArgumentException("Ordem inválida: tamanho diferente do número de jogadores.");
+        }
+        boolean[] seen = new boolean[jogadores.size()];
+        for (Integer id : ordem) {
+            if (id == null || id < 0 || id >= jogadores.size() || seen[id]) {
+                throw new IllegalArgumentException("Ordem inválida: ids repetidos/fora do intervalo.");
+            }
+            seen[id] = true;
+        }
+        turno.definirOrdem(ordem);
+    }
+    
+
 }
