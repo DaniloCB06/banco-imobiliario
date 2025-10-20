@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 /** Representa um dado de 6 faces */
 final class Dado {

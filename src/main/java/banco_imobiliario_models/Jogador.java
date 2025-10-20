@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 final class Jogador {
     private final int id;

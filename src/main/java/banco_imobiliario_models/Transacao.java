@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 /**
  * DTO simples para relatar efeitos financeiros de uma ação (ex.: aluguel).

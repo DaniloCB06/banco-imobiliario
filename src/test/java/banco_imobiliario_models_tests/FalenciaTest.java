@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models_Tests;
+package banco_imobiliario_models_tests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -7,8 +7,8 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
 
-import Banco_Imobiliario_Models.GameModel;
-import Banco_Imobiliario_Models.Transacao;
+import banco_imobiliario_models.GameModel;
+import banco_imobiliario_models.Transacao;
 
 /**
  * Iteração 1 – Regra #7 (Liquidação e Falência):

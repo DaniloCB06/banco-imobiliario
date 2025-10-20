@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 final class Movimento {
     private static int passos(int d1, int d2) {

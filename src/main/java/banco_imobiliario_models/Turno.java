@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 /**
  * Estado mínimo do turno: quem joga e controle de duplas consecutivas.

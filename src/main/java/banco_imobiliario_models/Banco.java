@@ -1,4 +1,4 @@
-package Banco_Imobiliario_Models;
+package banco_imobiliario_models;
 
 final class Banco {
     private static final int HONORARIOS = 200;
