@@ -66,7 +66,7 @@ public final class DefinicaoJogadoresDialog extends JDialog {
         setSize(new Dimension(680, 420));
 
         // ---------- Header ----------
-        JLabel titulo = new JLabel("Defina o nome (1–8) e a cor de cada jogador");
+        JLabel titulo = new JLabel("Defina o nome e a cor de cada jogador");
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 18f));
         titulo.setBorder(BorderFactory.createEmptyBorder(16, 16, 8, 16));
 
