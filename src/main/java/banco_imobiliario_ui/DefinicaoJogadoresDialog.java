@@ -26,14 +26,11 @@ import banco_imobiliario_controller.AppController;
 import banco_imobiliario_controller.PlayerProfile;
 
 /**
- * 2ª iteração – Funcionalidade 2: Definição dos jogadores.
  * Captura N (3..6) nomes e cores únicas, valida e entrega ao Controller.
  */
 public final class DefinicaoJogadoresDialog extends JDialog {
     private static final long serialVersionUID = 1L;
-
-    // Paleta fixa na MESMA ORDEM dos arquivos pin0..pin5:
-    // 0=Vermelho, 1=Azul, 2=Laranja, 3=Amarelo, 4=Roxo, 5=Cinza
+    
     private static final String[] COLOR_NAMES = {
         "Vermelho", "Azul", "Laranja", "Amarelo", "Roxo", "Cinza"
     };
@@ -51,7 +48,6 @@ public final class DefinicaoJogadoresDialog extends JDialog {
     private final JTextField[] nomeCampos;
     private final JComboBox<ColorItem>[] corCombos;
 
-    // item que carrega "nome + color + índice do pino (0..5)"
     private static final class ColorItem {
         final String name; final Color color; final int pinIndex;
         ColorItem(String name, Color color, int pinIndex) {
@@ -171,7 +167,7 @@ public final class DefinicaoJogadoresDialog extends JDialog {
             }
             pinosUsados.add(sel.pinIndex);
 
-            // agora enviamos também o índice do pino (0..5)
+            // enviamos também o índice do pino (0..5)
             perfis.add(new PlayerProfile(i, nome, sel.color, sel.pinIndex));
         }
 

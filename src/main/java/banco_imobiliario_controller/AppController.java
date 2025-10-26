@@ -71,17 +71,17 @@ public final class AppController {
         if (perfis.isEmpty()) throw new IllegalArgumentException("Lista de jogadores vazia.");
         this.playerProfiles = new ArrayList<>(perfis);
 
-        // ---- SORTEIO AUTOMÁTICO DA ORDEM (com desempate) ----
+        // ---- SORTEIO AUTOMÁTICO DA ORDEM ----
         SorteioResultado sr = sortearOrdemAutomatica(this.playerProfiles);
         this.ordemJogadores = sr.ordem;
 
         // Informa a ordem ao Model
         model.definirOrdemJogadores(this.ordemJogadores);
 
-        // >>> GARANTE UM TABULEIRO DE TESTE CARREGADO <<<
+        // Garante um tabuleiro de teste carregado
         garantirTabuleiroCarregado();
 
-        // Abre o tabuleiro já com a ordem definida (overlay visível)
+        // abre o tabuleiro já com a ordem definida
         fecharJanelaAtualSeExistir();
         janelaAtual = new TabuleiroFrame(this);
         janelaAtual.setVisible(true);

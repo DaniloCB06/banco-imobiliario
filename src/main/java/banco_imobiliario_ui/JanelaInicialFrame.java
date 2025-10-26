@@ -18,8 +18,7 @@ import javax.swing.SwingConstants;
 import banco_imobiliario_controller.AppController;
 
 /**
- * 2ª iteração – Funcionalidade 1: Exibição da janela inicial.
- * Nesta etapa, a janela só define o NÚMERO de jogadores (3..6).
+ * Exibição da janela inicial.
  */
 public final class JanelaInicialFrame extends JFrame {
     private static final long serialVersionUID = 1L;
@@ -32,7 +31,7 @@ public final class JanelaInicialFrame extends JFrame {
 
         setTitle("Banco Imobiliário — Nova Partida");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setResizable(false);                 // mantemos baixo e dentro do limite 1280x800
+        setResizable(false);                
         setSize(new Dimension(600, 360));
         setLocationRelativeTo(null);
 
