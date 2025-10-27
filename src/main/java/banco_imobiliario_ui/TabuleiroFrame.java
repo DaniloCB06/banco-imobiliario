@@ -27,7 +27,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
         setResizable(false);
 
         // Tamanho total da janela (tabuleiro 700 + barra lateral)
-        setSize(new java.awt.Dimension(1000, 780)); // leve aumento para caber 3–6 jogadores
+        setSize(new java.awt.Dimension(1000, 780)); 
         setLocationRelativeTo(null);
 
         boardPanel = new BoardPanel(controller);
@@ -94,7 +94,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
 
         p.add(center, BorderLayout.CENTER);
 
-        // Rodapé: botão Jogar + status
+        // rodapé: botão Jogar + status
         javax.swing.JPanel south = new javax.swing.JPanel(new BorderLayout(4,4));
         javax.swing.JButton btnJogar = new javax.swing.JButton("Jogar");
         btnJogar.addActionListener(this::onJogar);
@@ -131,7 +131,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
         // 3) Mover peão e aplicar efeitos obrigatórios (aluguel etc.)
         model.deslocarPiaoEAplicarObrigatorios();
 
-        // 4) Encerrar vez se NÃO houver dupla (3ª dupla já termina a vez)
+        // 4) Encerrar vez se não houver dupla (3ª dupla já termina a vez)
         model.encerrarAcoesDaVezEPassarTurno();
 
         // 5) Atualiza status, cor do jogador da vez e repinta peões
@@ -160,7 +160,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
     }
 
     // =====================================================================================
-    // Painel do TABULEIRO — SOMENTE Java2D
+    // Painel do TABULEIRO
     // =====================================================================================
     private static final class BoardPanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
@@ -248,7 +248,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
                 // Peões
                 drawPawns(g2);
 
-                // (sem overlay de ordem — agora é um painel na lateral)
             } finally {
                 g2.dispose();
             }
@@ -282,7 +281,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
                 java.awt.image.BufferedImage pin = (idx >= 0 && idx < pinImgs.length) ? pinImgs[idx] : null;
 
                 if (pin == null) {
-                    // fallback: aproximação por cor (apenas se índice ausente)
                     idx = indexForColor(p.getCor());
                     pin = (idx >= 0 && idx < pinImgs.length) ? pinImgs[idx] : null;
                 }
@@ -295,7 +293,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
                     java.awt.Image scaled = pin.getScaledInstance(pinW, pinH, java.awt.Image.SCALE_SMOOTH);
                     g2.drawImage(scaled, x, y, null); // drawImage
                 } else {
-                    // Fallback: círculo colorido
                     int pawnR = (int) Math.round(cell * 0.28);
                     g2.setColor(p.getCor());
                     g2.fillOval(cx - pawnR, cy - pawnR, pawnR * 2, pawnR * 2);
@@ -333,7 +330,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
             return dr*dr + dg*dg + db*db;
         }
 
-        /** Deslocamentos para até 6 peões na mesma casa (evita overlap). */
         private java.awt.Point pawnOffsetForIndex(int idx, int cellPx) {
             int d = java.lang.Math.max(6, (int)java.lang.Math.round(cellPx * 0.18));
             switch (idx) {
@@ -347,7 +343,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
             }
         }
 
-        /** Centros das 40 posições na borda 11x11 (0 no canto inf. direito, anti-horário). */
         private java.util.List<java.awt.geom.Point2D.Double> buildCellCenters() {
             java.util.List<java.awt.geom.Point2D.Double> list = new java.util.ArrayList<>(40);
             double cell = side / 11.0;
