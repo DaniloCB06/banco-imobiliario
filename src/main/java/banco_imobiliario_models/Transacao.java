@@ -6,7 +6,7 @@ package banco_imobiliario_models;
  */
 public class Transacao {
 
-    private final String tipo;              // "ALUGUEL" ou "SEM_EFEITO"
+    private final String tipo;              // "ALUGUEL", "IMPOSTO", "LUCRO" ou "SEM_EFEITO"
     private final boolean efetuada;         // true se houve débito/crédito
     private final int pagadorId;            // id do jogador da vez (quando aplicável)
     private final Integer recebedorId;      // id do dono, quando aplicável
@@ -27,6 +27,17 @@ public class Transacao {
 
     public static Transacao aluguelEfetuado(int pagadorId, int recebedorId, int posicaoProp, int valor) {
         return new Transacao("ALUGUEL", true, pagadorId, recebedorId, posicaoProp, valor, null);
+    }
+
+    // NOVO: imposto pago ao banco
+    public static Transacao impostoPago(int pagadorId, int posicao, int valor) {
+        return new Transacao("IMPOSTO", true, pagadorId, null, posicao, valor, null);
+    }
+
+    // NOVO: lucro recebido do banco
+    public static Transacao lucroRecebido(int recebedorId, int posicao, int valor) {
+        // por consistência, 'pagadorId' continua sendo o jogador da vez
+        return new Transacao("LUCRO", true, recebedorId, null, posicao, valor, null);
     }
 
     public static Transacao semEfeito(String motivo, int pagadorId, int posicaoProp, Integer recebedorId, int valor) {
