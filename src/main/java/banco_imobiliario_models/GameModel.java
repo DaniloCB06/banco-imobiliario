@@ -135,18 +135,20 @@ public class GameModel {
 
 	/** NOVO: para testes – força os valores dos dados (1..6) sem random. */
 	public ResultadoDados lancarDadosForcado(int d1, int d2) {
-		exigirPartidaIniciada();
-		if (d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
-			throw new IllegalArgumentException("Valores dos dados devem estar entre 1 e 6.");
-		}
-		turno.registrarLance(d1, d2);
-		this.ultimoD1 = d1;
-		this.ultimoD2 = d2;
+	    exigirPartidaIniciada();
+	    if (d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
+	        throw new IllegalArgumentException("Valores dos dados devem estar entre 1 e 6.");
+	    }
+	    turno.registrarLance(d1, d2);
+	    this.ultimoD1 = d1;
+	    this.ultimoD2 = d2;
 
-		if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
-			this.deveIrParaPrisaoPorTerceiraDupla = true;
-		}
-		return new ResultadoDados(d1, d2);
+	    if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
+	        this.deveIrParaPrisaoPorTerceiraDupla = true;
+	    }
+	    // >>> faltava isso:
+	    notifyObservers();
+	    return new ResultadoDados(d1, d2);
 	}
 
 	public boolean houveDuplaNoUltimoLancamento() {
@@ -170,17 +172,23 @@ public class GameModel {
 	 * normalmente.
 	 */
 	public void encerrarAcoesDaVezEPassarTurno() {
-		exigirPartidaIniciada();
-		boolean dupla = turno.houveDupla();
-		int consecutivas = turno.getDuplasConsecutivas();
-		if (dupla && consecutivas > 0) {
-			// dupla comum -> mesma pessoa continua
-			return;
-		}
-		// sem dupla (ou 3ª dupla já resolvida) -> próximo jogador da ORDEM
-		turno.passarVez(); // << agora sem parâmetro
-		limparContextoDeQueda();
-		this.ultimoD1 = this.ultimoD2 = null;
+	    exigirPartidaIniciada();
+	    boolean dupla = turno.houveDupla();
+	    int consecutivas = turno.getDuplasConsecutivas();
+
+	    if (dupla && consecutivas > 0) {
+	        // dupla comum -> MESMO jogador continua
+	        // (não muda jogador da vez, então não precisa notificar aqui)
+	        return;
+	    }
+
+	    // Sem dupla (ou 3ª dupla já resolvida no deslocamento) -> próximo jogador
+	    turno.passarVez();
+	    limparContextoDeQueda();
+
+
+	    // >>> notificar a troca de vez SEMPRE que ela ocorre
+	    notifyObservers();
 	}
 
 	// =====================================================================================
