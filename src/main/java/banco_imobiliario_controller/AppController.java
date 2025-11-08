@@ -85,15 +85,18 @@ public final class AppController {
 
 		// abre o tabuleiro já com a ordem definida
 		fecharJanelaAtualSeExistir();
-		janelaAtual = new TabuleiroFrame(this);
+		
+		TabuleiroFrame frame = new TabuleiroFrame(this);
+		model.addObserver(frame);
+		
+		janelaAtual = frame;
 		janelaAtual.setVisible(true);
+		
+		frame.update(model);
 
 		// Popup só para visualização do sorteio
 		JOptionPane.showMessageDialog(janelaAtual, sr.popup, "Ordem definida", JOptionPane.INFORMATION_MESSAGE);
-
-		if (janelaAtual instanceof TabuleiroFrame) {
-			((TabuleiroFrame) janelaAtual).repaintBoard();
-		}
+		
 	}
 
 	/**
@@ -114,10 +117,13 @@ public final class AppController {
 	}
 
 	private void fecharJanelaAtualSeExistir() {
-		if (janelaAtual != null) {
-			janelaAtual.dispose();
-			janelaAtual = null;
-		}
+	    if (janelaAtual != null) {
+	        if (janelaAtual instanceof TabuleiroFrame) {
+	            model.removeObserver((TabuleiroFrame) janelaAtual);
+	        }
+	        janelaAtual.dispose();
+	        janelaAtual = null;
+	    }
 	}
 
 	// ========================= SORTEIO: lógica interna =========================

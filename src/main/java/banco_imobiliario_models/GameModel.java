@@ -80,6 +80,7 @@ public class GameModel {
 		this.ultimoD1 = this.ultimoD2 = null;
 		this.deveIrParaPrisaoPorTerceiraDupla = false;
 		limparContextoDeQueda();
+		notifyObservers();
 	}
 
 	public void setTabuleiro(Tabuleiro tabuleiro) {
@@ -128,6 +129,7 @@ public class GameModel {
 		if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
 			this.deveIrParaPrisaoPorTerceiraDupla = true;
 		}
+		notifyObservers();
 		return new ResultadoDados(d1, d2);
 	}
 
@@ -202,6 +204,7 @@ public class GameModel {
 			deveIrParaPrisaoPorTerceiraDupla = false;
 			turno.resetarDuplas();
 			iniciarContextoDeQueda(j.getPosicao());
+			notifyObservers();
 			return new ResultadoMovimento(id, posAnt, 0, j.getPosicao(), false);
 		}
 
@@ -210,6 +213,7 @@ public class GameModel {
 			boolean saiu = tentarSairDaPrisaoComDuplaOuCarta();
 			if (!saiu) {
 				iniciarContextoDeQueda(j.getPosicao());
+				notifyObservers();
 				return new ResultadoMovimento(id, j.getPosicao(), 0, j.getPosicao(), false);
 			}
 		}
@@ -229,8 +233,10 @@ public class GameModel {
 			int posAnt = j.getPosicao();
 			enviarParaPrisao(id);
 			iniciarContextoDeQueda(j.getPosicao());
+			notifyObservers();
 			return new ResultadoMovimento(id, posAnt, 0, j.getPosicao(), false);
 		}
+		notifyObservers();
 		return r;
 	}
 
@@ -260,6 +266,7 @@ public class GameModel {
 		prop.setDono(jogador);
 
 		this.acabouDeComprarNestaQueda = true;
+		notifyObservers();
 		return true;
 	}
 
@@ -298,6 +305,7 @@ public class GameModel {
 		jogador.debitar(preco);
 		banco.creditar(preco);
 		prop.construirCasa();
+		notifyObservers();
 
 		jaConstruiuNestaQueda = true;
 		return true;
@@ -334,6 +342,7 @@ public class GameModel {
 		jogador.debitar(preco);
 		banco.creditar(preco);
 		prop.construirHotel();
+		notifyObservers();
 
 		jaConstruiuNestaQueda = true;
 		return true;
@@ -410,11 +419,13 @@ public class GameModel {
 			return t;
 		}
 		// 2) Aluguel (quando a casa é propriedade de outro e tem ≥1 casa/hotel)
+		notifyObservers();
 		return pagarAluguelSeDevido();
 	}
 
 	public Transacao deslocarPiaoEAplicarObrigatorios() {
 		deslocarPiao();
+		notifyObservers();
 		return aplicarEfeitosObrigatoriosPosMovimento();
 	}
 
@@ -708,9 +719,11 @@ public class GameModel {
 			if (!p.podeConstruirCasa())
 				break;
 			p.construirCasa();
+			notifyObservers();
 		}
 		if (hotel && p.podeConstruirHotel()) {
 			p.construirHotel();
+			notifyObservers();
 		}
 	}
 
@@ -842,10 +855,54 @@ public class GameModel {
 			seen[id] = true;
 		}
 		turno.definirOrdem(ordem);
+		notifyObservers();
 	}
-	
+
 	public void carregarTabuleiroOficialBR() {
-	    this.setTabuleiro(TabuleiroOficialFactory.criar());
+		this.setTabuleiro(TabuleiroOficialFactory.criar());
+	}
+
+	// OBSERVER
+
+	public static interface Observer {
+		void update(GameModel source);
+	}
+
+	private final java.util.concurrent.CopyOnWriteArrayList<Observer> observers = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+	public void addObserver(Observer o) {
+		if (o != null)
+			observers.addIfAbsent(o);
+	}
+
+	public void removeObserver(Observer o) {
+		if (o != null)
+			observers.remove(o);
+	}
+
+	private void notifyObservers() {
+		for (Observer o : observers) {
+			try {
+				o.update(this);
+			} catch (Exception ignore) {
+			}
+		}
+	}
+
+	public Integer getUltimoD1() {
+		return ultimoD1;
+	}
+
+	public Integer getUltimoD2() {
+		return ultimoD2;
+	}
+
+	public boolean houveDupla() {
+		return turno != null && turno.houveDupla();
+	}
+
+	public boolean passouOuCaiuNoInicioDaUltimaJogada() {
+		return false; 
 	}
 
 }

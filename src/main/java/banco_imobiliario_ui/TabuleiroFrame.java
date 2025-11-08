@@ -4,7 +4,8 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 
-public final class TabuleiroFrame extends javax.swing.JFrame {
+public final class TabuleiroFrame extends javax.swing.JFrame
+implements banco_imobiliario_models.GameModel.Observer {
     private static final long serialVersionUID = 1L;
 
     private final banco_imobiliario_controller.AppController controller;
@@ -116,27 +117,20 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
         banco_imobiliario_models.GameModel model = controller.getModel();
 
         // 1) Lançar dados (aleatório ou forçado)
-        banco_imobiliario_models.GameModel.ResultadoDados r;
         if (rbManual.isSelected()) {
             int d1 = (Integer) cbD1.getSelectedItem();
             int d2 = (Integer) cbD2.getSelectedItem();
-            r = model.lancarDadosForcado(d1, d2);
+            model.lancarDadosForcado(d1, d2);
         } else {
-            r = model.lancarDados();
+            model.lancarDados();
         }
 
-        // 2) Exibir dados na área visual
-        dicePanel.setDice(r.getD1(), r.getD2());
-
-        // 3) Mover peão e aplicar efeitos obrigatórios (aluguel etc.)
+        // 2) Mover e aplicar efeitos obrigatórios
         model.deslocarPiaoEAplicarObrigatorios();
 
-        // 4) Encerrar vez se não houver dupla (3ª dupla já termina a vez)
+        // 3) Encerrar vez se não houver dupla (3ª dupla já termina a vez)
         model.encerrarAcoesDaVezEPassarTurno();
 
-        // 5) Atualiza status, cor do jogador da vez e repinta peões
-        atualizarUIJogadorDaVez();
-        boardPanel.repaint();
     }
 
     /** Atualiza rótulos e a cor da área dos dados conforme o jogador da vez. */
@@ -560,4 +554,24 @@ public final class TabuleiroFrame extends javax.swing.JFrame {
             }
         }
     }
+    
+    @Override
+    public void update(banco_imobiliario_models.GameModel m) {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            // Dados (se já houve lançamento)
+            Integer d1 = m.getUltimoD1();
+            Integer d2 = m.getUltimoD2();
+            if (d1 != null && d2 != null) {
+                dicePanel.setDice(d1, d2);
+            }
+
+            // Status/cor do jogador da vez
+            atualizarUIJogadorDaVez();
+
+            // Repaints
+            boardPanel.repaint();
+            orderPanel.repaint();
+        });
+    }
+    
 }
