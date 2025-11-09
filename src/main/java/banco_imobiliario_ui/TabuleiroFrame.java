@@ -56,7 +56,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
         javax.swing.JPanel controls = buildControls(); // painel lateral
 
-        // Botão de carta
+        // Botão de carta (território)
         btnCartaTerritorio.setEnabled(false);
         btnCartaTerritorio.addActionListener(e -> {
             if (nomeCasaParaExibir != null) {
@@ -157,7 +157,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             model.lancarDados();
         }
 
-        // 2) Mover e aplicar efeitos obrigatórios
+        // 2) Mover e aplicar efeitos obrigatórios (inclui IMPOSTO/LUCRO e ALUGUEL)
         model.deslocarPiaoEAplicarObrigatorios();
 
         // 3) Encerrar vez (regra de terceira dupla tratada no model)
@@ -724,6 +724,47 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 nomeCasaParaExibir = null;
                 btnCartaTerritorio.setEnabled(false);
             }
+
+            // NOVO: se o jogador acabou de sacar uma carta de Sorte/Revés, mostrar popup.
+            // O método deve "consumir" o evento para não repetir a exibição em updates futuros.
+         // Tenta mostrar carta Sorte/Revés, se o GameModel tiver esse método (sem travar a compilação).
+            try {
+                java.lang.reflect.Method meth = m.getClass().getMethod("consumirSorteRevesRecemSacada");
+                Object opt = meth.invoke(m); // esperado: Optional<?>
+                if (opt instanceof java.util.Optional) {
+                    java.util.Optional<?> o = (java.util.Optional<?>) opt;
+                    if (o.isPresent()) {
+                        Object carta = o.get();
+                        Integer num = null;
+
+                        // tenta carta.getNumero()
+                        try {
+                            java.lang.reflect.Method getNum = carta.getClass().getMethod("getNumero");
+                            Object n = getNum.invoke(carta);
+                            if (n instanceof Number) num = ((Number) n).intValue();
+                        } catch (Exception ignore) {}
+
+                        // fallback: campo "numero"
+                        if (num == null) {
+                            try {
+                                java.lang.reflect.Field f = carta.getClass().getDeclaredField("numero");
+                                f.setAccessible(true);
+                                Object n = f.get(carta);
+                                if (n instanceof Number) num = ((Number) n).intValue();
+                            } catch (Exception ignore) {}
+                        }
+
+                        if (num != null) {
+                            controller.exibirCartaSorteRevesPorNumero(num);
+                        }
+                    }
+                }
+            } catch (NoSuchMethodException __) {
+                // versão do GameModel sem esse método -> ignora silenciosamente
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
         });
     }
 }

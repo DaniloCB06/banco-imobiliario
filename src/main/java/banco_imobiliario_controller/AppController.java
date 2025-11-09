@@ -39,7 +39,7 @@ public final class AppController {
     // Ordem sorteada (ids 0..N-1 do GameModel)
     private List<Integer> ordemJogadores = new ArrayList<>();
 
-    // MAPEAMENTO LITERAL: nome da casa -> nome EXATO do arquivo da carta
+    // MAPEAMENTO LITERAL: nome da casa -> nome EXATO do arquivo da carta (territórios)
     private static final Map<String, String> MAPEAMENTO_CARTAS = criarMapCartas();
 
     private AppController() {}
@@ -115,7 +115,7 @@ public final class AppController {
     }
 
     // =========================================================================
-    // [4] Exibição de cartas de território (popup)
+    // [4] Exibição de cartas de TERRITÓRIO (popup)
     // =========================================================================
     /** Abre um diálogo com a imagem da carta do território. */
     public void exibirCartaTerritorio(String nomeCasa) {
@@ -190,57 +190,166 @@ public final class AppController {
             }
         }
 
-        System.out.println("[Carta] não encontrada: " + arquivo + " (key=" + key + ")");
+        System.out.println("[Carta Território] não encontrada: " + arquivo + " (key=" + key + ")");
         return java.util.Optional.empty();
     }
 
-    // Raízes candidatas relativas ao working dir (., .., ../.., ...)
-    private java.io.File[] possibleRoots() {
-        return new java.io.File[] {
-            new java.io.File("."),
-            new java.io.File(".."),
-            new java.io.File("../.."),
-            new java.io.File("../../.."),
-            new java.io.File("../../../..")
-        };
+    // =========================================================================
+    // [4B] Exibição de cartas de SORTE/REVÉS (popup)
+    // =========================================================================
+    /**
+     * Abre popup da carta de Sorte/Revés por número (ex.: 13 -> procura SR_13.png, SorteReves_13.png, 13.png).
+     * Reutiliza o mesmo diálogo de carta para mostrar a imagem.
+     */
+    public void exibirCartaSorteRevesPorNumero(int numero) {
+        java.util.Optional<javax.swing.ImageIcon> icon = localizarIconeSorteReves(numero);
+        String titulo = "Sorte/Revés #" + numero;
+        if (icon.isPresent()) {
+            new banco_imobiliario_ui.CartaTerritorioDialog( // reaproveitando o mesmo dialog genérico de imagem
+                (javax.swing.JFrame) janelaAtual,
+                titulo,
+                icon.get()
+            ).setVisible(true);
+        } else {
+            javax.swing.JOptionPane.showMessageDialog(
+                janelaAtual,
+                "Imagem da carta de Sorte/Revés não encontrada: " + titulo +
+                "\nColoque o arquivo em assets/sorte_reves (ou variações listadas abaixo), por exemplo:\n" +
+                "SR_13.png, SorteReves_13.png, sorte_reves_13.png ou 13.png.",
+                "Carta não encontrada",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+        }
     }
 
-    // Dentro de 'dir', tenta achar 'fileName' exatamente; se não, ignora case
-    private java.io.File resolveFileCaseInsensitive(java.io.File dir, String fileName) {
+ // AppController.java
+
+    /** Overload conveniente caso você já tenha o objeto de carta no UI. (robusto, sem depender de getNumero()) */
+    public void exibirCartaSorteReves(banco_imobiliario_models.SorteRevesCard carta) {
+    	if (carta == null) return;
+    	
+        exibirCartaSorteRevesPorNumero(carta.getId());
+
+        Integer num = null;
+
+        // 1) tenta método getNumero()
         try {
-            if (!dir.isDirectory()) return null;
-            // direto
-            java.io.File exact = new java.io.File(dir, fileName);
-            if (exact.exists()) return exact;
-            // ignorando maiúsc./minúsc.
-            String target = fileName.toLowerCase(java.util.Locale.ROOT);
-            java.io.File[] list = dir.listFiles();
-            if (list == null) return null;
-            for (java.io.File f : list) {
-                if (f.isFile() && f.getName().toLowerCase(java.util.Locale.ROOT).equals(target)) {
-                    return f;
+            java.lang.reflect.Method m = carta.getClass().getMethod("getNumero");
+            Object v = m.invoke(carta);
+            if (v instanceof Number) num = ((Number) v).intValue();
+        } catch (Exception ignore) {}
+
+        // 2) tenta campo "numero"
+        if (num == null) {
+            try {
+                java.lang.reflect.Field f = carta.getClass().getDeclaredField("numero");
+                f.setAccessible(true);
+                Object v = f.get(carta);
+                if (v instanceof Number) num = ((Number) v).intValue();
+            } catch (Exception ignore) {}
+        }
+
+        // 3) fallback: procura um número dentro do toString()
+        if (num == null) {
+            String s = String.valueOf(carta);
+            java.util.regex.Matcher mm = java.util.regex.Pattern.compile("(\\d+)").matcher(s);
+            if (mm.find()) {
+                try { num = Integer.parseInt(mm.group(1)); } catch (Exception ignore) {}
+            }
+        }
+
+        if (num != null) {
+            exibirCartaSorteRevesPorNumero(num);
+        } else {
+            // Sem número identificável -> mostra alerta simpático
+            javax.swing.JOptionPane.showMessageDialog(
+                janelaAtual,
+                "Não consegui identificar o número da carta de Sorte/Revés (nem getter, nem campo 'numero').",
+                "Carta de Sorte/Revés",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+    }
+
+
+    /**
+     * Busca robusta por imagens de Sorte/Revés:
+     * - classpath: /assets/sorte_reves/, /assets/sorte-reves/, /assets/sortereves/
+     * - filesystem: assets/sorte_reves, assets/sorte-reves, assets/sortereves
+     * - padrões de nome: SR_%02d.png, SR_%d.png, SorteReves_%02d.png, sorte_reves_%02d.png, %02d.png, %d.png
+     */
+    private java.util.Optional<javax.swing.ImageIcon> localizarIconeSorteReves(int numero) {
+        String[] basesClasspath = {
+            "/assets/sorte_reves/",
+            "/assets/sorte-reves/",
+            "/assets/sortereves/"
+        };
+        String[] basesFS = {
+            "assets/sorte_reves",
+            "assets/sorte-reves",
+            "assets/sortereves"
+        };
+        String[] patterns = {
+    	    "SR_%02d.png", "SR_%d.png",
+    	    "SorteReves_%02d.png", "SorteReves_%d.png",
+    	    "sorte_reves_%02d.png", "sorte_reves_%d.png",
+    	    "chance%02d.png", "chance%d.png", 
+    	    "%02d.png", "%d.png"
+        };
+        // 1) classpath
+        for (String base : basesClasspath) {
+            for (String p : patterns) {
+                String name = String.format(java.util.Locale.ROOT, p, numero);
+                java.io.InputStream is = null;
+                try {
+                    is = getClass().getResourceAsStream(base + name);
+                    if (is != null) {
+                        byte[] bytes = readAllBytes8(is);
+                        return java.util.Optional.of(new javax.swing.ImageIcon(bytes));
+                    }
+                } catch (Exception ignore) {
+                } finally {
+                    if (is != null) try { is.close(); } catch (Exception __) {}
                 }
             }
-        } catch (Exception ignore) {}
-        return null;
-    }
-
-    // Busca recursiva limitada por profundidade
-    private java.io.File findRecursivelyByNameIgnoreCase(java.io.File dir, String fileName, int maxDepth) {
-        if (dir == null || maxDepth < 0 || !dir.isDirectory()) return null;
-        java.io.File f = resolveFileCaseInsensitive(dir, fileName);
-        if (f != null) return f;
-        java.io.File[] sub = dir.listFiles(java.io.File::isDirectory);
-        if (sub == null) return null;
-        for (java.io.File d : sub) {
-            java.io.File r = findRecursivelyByNameIgnoreCase(d, fileName, maxDepth - 1);
-            if (r != null) return r;
         }
-        return null;
+
+        // 2) filesystem (roots + dirs)
+        for (java.io.File root : possibleRoots()) {
+            for (String base : basesFS) {
+                java.io.File dir = new java.io.File(root, base);
+                for (String p : patterns) {
+                    String name = String.format(java.util.Locale.ROOT, p, numero);
+                    java.io.File f = resolveFileCaseInsensitive(dir, name);
+                    if (f != null && f.exists()) {
+                        return java.util.Optional.of(new javax.swing.ImageIcon(f.getAbsolutePath()));
+                    }
+                }
+            }
+        }
+
+        // 3) último recurso: procura recursiva por qualquer arquivo que "termine" com numero*.png
+        for (java.io.File root : possibleRoots()) {
+            java.io.File assets = new java.io.File(root, "assets");
+            java.io.File found = findRecursivelyBySuffixIgnoreCase(
+                assets,
+                new String[] { String.format(java.util.Locale.ROOT, "_%02d.png", numero),
+                               String.format(java.util.Locale.ROOT, "_%d.png", numero),
+                               String.format(java.util.Locale.ROOT, "%02d.png", numero),
+                               String.format(java.util.Locale.ROOT, "%d.png", numero) },
+                3
+            );
+            if (found != null) {
+                return java.util.Optional.of(new javax.swing.ImageIcon(found.getAbsolutePath()));
+            }
+        }
+
+        System.out.println("[Carta Sorte/Revés] não encontrada: #" + numero);
+        return java.util.Optional.empty();
     }
 
     // =========================================================================
-    // [5] Mapeamento literal das cartas + helpers de normalização
+    // [5] Mapeamento literal das cartas (TERRITÓRIOS) + helpers de normalização
     // =========================================================================
     private static Map<String, String> criarMapCartas() {
         LinkedHashMap<String, String> m = new LinkedHashMap<>();
@@ -416,4 +525,77 @@ public final class AppController {
     public GameModel getModel() { return model; }
     public List<PlayerProfile> getPlayerProfiles() { return Collections.unmodifiableList(playerProfiles); }
     public List<Integer> getOrdemJogadores() { return Collections.unmodifiableList(ordemJogadores); }
+
+    // =========================================================================
+    // [9] Utilidades de arquivo/paths (territórios + sorte/revés)
+    // =========================================================================
+
+    // Raízes candidatas relativas ao working dir (., .., ../.., ...)
+    private java.io.File[] possibleRoots() {
+        return new java.io.File[] {
+            new java.io.File("."),
+            new java.io.File(".."),
+            new java.io.File("../.."),
+            new java.io.File("../../.."),
+            new java.io.File("../../../..")
+        };
+    }
+
+    // Dentro de 'dir', tenta achar 'fileName' exatamente; se não, ignora case
+    private java.io.File resolveFileCaseInsensitive(java.io.File dir, String fileName) {
+        try {
+            if (!dir.isDirectory()) return null;
+            // direto
+            java.io.File exact = new java.io.File(dir, fileName);
+            if (exact.exists()) return exact;
+            // ignorando maiúsc./minúsc.
+            String target = fileName.toLowerCase(java.util.Locale.ROOT);
+            java.io.File[] list = dir.listFiles();
+            if (list == null) return null;
+            for (java.io.File f : list) {
+                if (f.isFile() && f.getName().toLowerCase(java.util.Locale.ROOT).equals(target)) {
+                    return f;
+                }
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
+    // Busca recursiva limitada por profundidade (nome exato)
+    private java.io.File findRecursivelyByNameIgnoreCase(java.io.File dir, String fileName, int maxDepth) {
+        if (dir == null || maxDepth < 0 || !dir.isDirectory()) return null;
+        java.io.File f = resolveFileCaseInsensitive(dir, fileName);
+        if (f != null) return f;
+        java.io.File[] sub = dir.listFiles(java.io.File::isDirectory);
+        if (sub == null) return null;
+        for (java.io.File d : sub) {
+            java.io.File r = findRecursivelyByNameIgnoreCase(d, fileName, maxDepth - 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    // Busca recursiva limitada por profundidade (por sufixos possíveis)
+    private java.io.File findRecursivelyBySuffixIgnoreCase(java.io.File dir, String[] suffixes, int maxDepth) {
+        if (dir == null || maxDepth < 0 || !dir.isDirectory()) return null;
+        java.io.File[] list = dir.listFiles();
+        if (list == null) return null;
+        for (java.io.File f : list) {
+            if (f.isFile()) {
+                String name = f.getName().toLowerCase(java.util.Locale.ROOT);
+                for (String suf : suffixes) {
+                    if (name.endsWith(suf.toLowerCase(java.util.Locale.ROOT))) {
+                        return f;
+                    }
+                }
+            }
+        }
+        java.io.File[] sub = dir.listFiles(java.io.File::isDirectory);
+        if (sub == null) return null;
+        for (java.io.File d : sub) {
+            java.io.File r = findRecursivelyBySuffixIgnoreCase(d, suffixes, maxDepth - 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
 }
