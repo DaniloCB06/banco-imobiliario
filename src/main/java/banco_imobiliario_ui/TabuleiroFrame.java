@@ -687,15 +687,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         }
     }
 
-//  // =========================================================================
-//  // [9] Painel da ORDEM DOS JOGADORES (se quiser reativar)
-//  // =========================================================================
-//  private static final class OrderPanel extends javax.swing.JPanel {
-//      ...
-//  }
-
     // =========================================================================
-    // [10] Observer do GameModel — recebe updates e sincroniza a UI
+    // [9] Observer do GameModel — recebe updates e sincroniza a UI
     // =========================================================================
     @Override
     public void update(banco_imobiliario_models.GameModel m) {
