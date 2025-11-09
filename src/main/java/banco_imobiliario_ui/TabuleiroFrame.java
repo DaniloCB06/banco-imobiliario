@@ -1,27 +1,43 @@
 package banco_imobiliario_ui;
 
+// ============================================================================
+// Imports
+// ============================================================================
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 
+// ============================================================================
+// Janela principal do tabuleiro
+// ============================================================================
 public final class TabuleiroFrame extends javax.swing.JFrame
-implements banco_imobiliario_models.GameModel.Observer {
+    implements banco_imobiliario_models.GameModel.Observer {
+
     private static final long serialVersionUID = 1L;
 
+    // =========================================================================
+    // [1] Estado & componentes principais
+    // =========================================================================
     private final banco_imobiliario_controller.AppController controller;
     private final BoardPanel boardPanel;
-    private final DicePanel dicePanel;
+    private final DicePanel  dicePanel;
     private final MoneyPanel moneyPanel;
-//    private final OrderPanel orderPanel;
-
+    // private final OrderPanel orderPanel;
 
     // Controles da lateral (fora do tabuleiro)
     private final javax.swing.JRadioButton rbAleatorio = new javax.swing.JRadioButton("Aleatório", true);
     private final javax.swing.JRadioButton rbManual    = new javax.swing.JRadioButton("Manual");
-    private final javax.swing.JComboBox<Integer> cbD1  = new javax.swing.JComboBox<>(new Integer[]{1,2,3,4,5,6});
-    private final javax.swing.JComboBox<Integer> cbD2  = new javax.swing.JComboBox<>(new Integer[]{1,2,3,4,5,6});
-    private final javax.swing.JLabel lblStatus = new javax.swing.JLabel("Pronto.");
+    private final javax.swing.JComboBox<Integer> cbD1   = new javax.swing.JComboBox<>(new Integer[]{1,2,3,4,5,6});
+    private final javax.swing.JComboBox<Integer> cbD2   = new javax.swing.JComboBox<>(new Integer[]{1,2,3,4,5,6});
+    private final javax.swing.JLabel lblStatus          = new javax.swing.JLabel("Pronto.");
 
+    // Botão para exibir a carta do território
+    private final javax.swing.JButton btnCartaTerritorio = new javax.swing.JButton("Exibir carta do território");
+    private String nomeCasaParaExibir = null;
+
+    // =========================================================================
+    // [2] Construtor
+    // =========================================================================
     public TabuleiroFrame(banco_imobiliario_controller.AppController controller) {
         this.controller = java.util.Objects.requireNonNull(controller);
 
@@ -29,41 +45,50 @@ implements banco_imobiliario_models.GameModel.Observer {
         setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
         setResizable(false);
 
-        // Tamanho total da janela (tabuleiro 00 + barra lateral)
-        setSize(new java.awt.Dimension(1000, 780)); 
+        // Tamanho total da janela (tabuleiro + barra lateral)
+        setSize(new java.awt.Dimension(1000, 780));
         setLocationRelativeTo(null);
 
         boardPanel = new BoardPanel(controller);
         dicePanel  = new DicePanel(controller);
         moneyPanel = new MoneyPanel(controller);
+        // orderPanel = new OrderPanel(controller);
 
-        javax.swing.JPanel controls = buildControls(); // painel lateral (fora do tabuleiro)
+        javax.swing.JPanel controls = buildControls(); // painel lateral
+
+        // Botão de carta
+        btnCartaTerritorio.setEnabled(false);
+        btnCartaTerritorio.addActionListener(e -> {
+            if (nomeCasaParaExibir != null) {
+                controller.exibirCartaTerritorio(nomeCasaParaExibir);
+            }
+        });
 
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
         getContentPane().add(controls, BorderLayout.EAST);
 
-        // estado inicial combos
+        // Estado inicial dos combos
         cbD1.setEnabled(false);
         cbD2.setEnabled(false);
         atualizarUIJogadorDaVez();
     }
 
+    // =========================================================================
+    // [3] Construção do painel lateral (dados, saldos, modo dos dados, ações)
+    // =========================================================================
     /** Painel lateral com controles e áreas dos dados/ordem (fora do tabuleiro). */
     private javax.swing.JPanel buildControls() {
         javax.swing.JPanel p = new javax.swing.JPanel(new BorderLayout(8, 8));
         p.setPreferredSize(new java.awt.Dimension(280, 780));
         p.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        // Topo: empilha área dos dados + ordem dos jogadores
+        // Topo: empilha área dos dados + (ordem) + saldos
         javax.swing.JPanel topStack = new javax.swing.JPanel();
         topStack.setOpaque(false);
         topStack.setLayout(new javax.swing.BoxLayout(topStack, javax.swing.BoxLayout.Y_AXIS));
         dicePanel.setAlignmentX(0f);
-        // orderPanel.setAlignmentX(0f);
         topStack.add(dicePanel);
-//        topStack.add(javax.swing.Box.createVerticalStrut(8));
-//        topStack.add(orderPanel);
         topStack.add(javax.swing.Box.createVerticalStrut(8));
         topStack.add(moneyPanel);
         p.add(topStack, BorderLayout.NORTH);
@@ -83,35 +108,38 @@ implements banco_imobiliario_models.GameModel.Observer {
         rbManual.addActionListener(e -> toggleManual(true));
 
         center.add(new javax.swing.JLabel("Modo dos dados:"), gbc);
-        gbc.gridy++;
-        center.add(rbAleatorio, gbc);
-        gbc.gridy++;
-        center.add(rbManual, gbc);
+        gbc.gridy++; center.add(rbAleatorio, gbc);
+        gbc.gridy++; center.add(rbManual, gbc);
 
-        gbc.gridy++;
-        center.add(new javax.swing.JLabel("Dado 1:"), gbc);
-        gbc.gridy++;
-        center.add(cbD1, gbc);
-        gbc.gridy++;
-        center.add(new javax.swing.JLabel("Dado 2:"), gbc);
-        gbc.gridy++;
-        center.add(cbD2, gbc);
+        gbc.gridy++; center.add(new javax.swing.JLabel("Dado 1:"), gbc);
+        gbc.gridy++; center.add(cbD1, gbc);
+        gbc.gridy++; center.add(new javax.swing.JLabel("Dado 2:"), gbc);
+        gbc.gridy++; center.add(cbD2, gbc);
 
         p.add(center, BorderLayout.CENTER);
 
-        // rodapé: botão Jogar + status
+        // Rodapé: Jogar + Carta + Status
         javax.swing.JPanel south = new javax.swing.JPanel(new BorderLayout(4,4));
         javax.swing.JButton btnJogar = new javax.swing.JButton("Jogar");
         btnJogar.addActionListener(this::onJogar);
 
+        javax.swing.JPanel actions = new javax.swing.JPanel();
+        actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.Y_AXIS));
+        actions.add(btnJogar);
+        actions.add(javax.swing.Box.createVerticalStrut(6));
+        actions.add(btnCartaTerritorio);
+
         lblStatus.setFont(lblStatus.getFont().deriveFont(java.awt.Font.PLAIN, 12f));
-        south.add(btnJogar, BorderLayout.NORTH);
+        south.add(actions, BorderLayout.NORTH);
         south.add(lblStatus, BorderLayout.SOUTH);
 
         p.add(south, BorderLayout.SOUTH);
         return p;
     }
 
+    // =========================================================================
+    // [4] Handlers dos controles
+    // =========================================================================
     private void toggleManual(boolean manual) {
         cbD1.setEnabled(manual);
         cbD2.setEnabled(manual);
@@ -132,11 +160,13 @@ implements banco_imobiliario_models.GameModel.Observer {
         // 2) Mover e aplicar efeitos obrigatórios
         model.deslocarPiaoEAplicarObrigatorios();
 
-        // 3) Encerrar vez se não houver dupla (3ª dupla já termina a vez)
+        // 3) Encerrar vez (regra de terceira dupla tratada no model)
         model.encerrarAcoesDaVezEPassarTurno();
-
     }
 
+    // =========================================================================
+    // [5] Helpers de UI
+    // =========================================================================
     /** Atualiza rótulos e a cor da área dos dados conforme o jogador da vez. */
     private void atualizarUIJogadorDaVez() {
         int id = controller.getModel().getJogadorDaVez();
@@ -147,19 +177,19 @@ implements banco_imobiliario_models.GameModel.Observer {
         lblStatus.setText("Vez de: " + nome + "  (clique em Jogar)");
         dicePanel.setPlayerColor(p != null ? p.getCor() : new Color(200,200,200));
         dicePanel.repaint();
-//        orderPanel.repaint();
+        // orderPanel.repaint();
     }
 
-    /** Exposto para repintar somente a área do tabuleiro quando necessário. */
+    /** Expõe repintura do tabuleiro e atualização rápida dos rótulos. */
     public void repaintBoard() {
         boardPanel.repaint();
         atualizarUIJogadorDaVez();
-//        orderPanel.repaint();
+        // orderPanel.repaint();
     }
 
-    // =====================================================================================
-    // Painel do TABULEIRO
-    // =====================================================================================
+    // =========================================================================
+    // [6] Painel do TABULEIRO (desenha imagem base e peões)
+    // =========================================================================
     private static final class BoardPanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
 
@@ -289,7 +319,7 @@ implements banco_imobiliario_models.GameModel.Observer {
                     int x = cx - pinW / 2;
                     int y = cy - pinH + 4; // ancora pelo "bico" do pino
                     java.awt.Image scaled = pin.getScaledInstance(pinW, pinH, java.awt.Image.SCALE_SMOOTH);
-                    g2.drawImage(scaled, x, y, null); // drawImage
+                    g2.drawImage(scaled, x, y, null);
                 } else {
                     int pawnR = (int) Math.round(cell * 0.28);
                     g2.setColor(p.getCor());
@@ -301,7 +331,7 @@ implements banco_imobiliario_models.GameModel.Observer {
             }
         }
 
-        /** Usado apenas como fallback quando o índice do pino não estiver disponível. */
+        /** Fallback quando o índice do pino não estiver disponível. */
         private int indexForColor(java.awt.Color c) {
             if (c == null) return 5; // cinza
             java.awt.Color[] targets = {
@@ -361,16 +391,16 @@ implements banco_imobiliario_models.GameModel.Observer {
         }
     }
 
-    // =====================================================================================
-    // Área visual dos DADOS (fora do tabuleiro)
-    // =====================================================================================
+    // =========================================================================
+    // [7] Área visual dos DADOS (fora do tabuleiro)
+    // =========================================================================
     private static final class DicePanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
 
         private final banco_imobiliario_controller.AppController controller;
         private java.awt.Color playerColor = new java.awt.Color(200,200,200);
         private int d1 = 1, d2 = 1; // último resultado exibido
-        private java.awt.Image[] diceImgs = new java.awt.Image[7]; // 1..6
+        private final java.awt.Image[] diceImgs = new java.awt.Image[7]; // 1..6
 
         DicePanel(banco_imobiliario_controller.AppController controller) {
             this.controller = controller;
@@ -379,13 +409,14 @@ implements banco_imobiliario_models.GameModel.Observer {
             loadDiceImages();
             fillWidth(this);
         }
-        
+
         private static void fillWidth(javax.swing.JComponent c) {
             java.awt.Dimension pref = c.getPreferredSize();
-            c.setMinimumSize(pref); // evita encolher demais na altura
-            c.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height)); // libera largura total
-            c.setAlignmentX(0f); // encosta à esquerda (opcional)
+            c.setMinimumSize(pref);
+            c.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
+            c.setAlignmentX(0f);
         }
+
         private void loadDiceImages() {
             for (int i = 1; i <= 6; i++) {
                 diceImgs[i] = loadImage("/assets/dados/die_face_" + i + ".png");
@@ -451,7 +482,7 @@ implements banco_imobiliario_models.GameModel.Observer {
         private void drawDie(java.awt.Graphics2D g2, int value, int x, int y, int size) {
             java.awt.Image img = (value >= 1 && value <= 6) ? diceImgs[value] : null;
             if (img != null) {
-                g2.drawImage(img, x, y, size, size, null); // drawImage
+                g2.drawImage(img, x, y, size, size, null);
             } else {
                 g2.setColor(java.awt.Color.WHITE);
                 g2.fillRoundRect(x, y, size, size, 12, 12);
@@ -467,290 +498,205 @@ implements banco_imobiliario_models.GameModel.Observer {
         }
     }
 
-//    // =====================================================================================
-//    // Painel da ORDEM DOS JOGADORES (lateral, abaixo dos dados)
-//    // =====================================================================================
-//    private static final class OrderPanel extends javax.swing.JPanel {
-//        private static final long serialVersionUID = 1L;
-//        private final banco_imobiliario_controller.AppController controller;
-//
-//        OrderPanel(banco_imobiliario_controller.AppController controller) {
-//            this.controller = controller;
-//            setOpaque(false);
-//            fillWidth(this);
-//        }
-//
-//        /** Altura preferida dinâmica (3 a 6 jogadores) baseada nas fontes. */
-//        @Override public java.awt.Dimension getPreferredSize() {
-//            int n = 6; // suporte máximo
-//            java.util.List<Integer> ordem = controller.getOrdemJogadores();
-//            if (ordem != null && !ordem.isEmpty()) n = java.lang.Math.min(6, java.lang.Math.max(3, ordem.size()));
-//
-//            // Calcula com métricas reais
-//            java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
-//            java.awt.Graphics2D g2 = bi.createGraphics();
-//            java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
-//            java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-//            g2.setFont(titleFont);
-//            int titleH = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent();
-//            g2.setFont(listFont);
-//            int lineH = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent() + 4;
-//            g2.dispose();
-//
-//            int innerPad = 10, gapTitle = 8;
-//            int h = innerPad + titleH + gapTitle + n * lineH + innerPad;
-//
-//            // Largura fixa da lateral (~igual aos dados)
-//            return new java.awt.Dimension(236, h);
-//        }
-//
-//        @Override protected void paintComponent(java.awt.Graphics g) {
-//            super.paintComponent(g);
-//            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-//            try {
-//                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-//
-//                java.util.List<Integer> ordem = controller.getOrdemJogadores();
-//                java.util.List<banco_imobiliario_controller.PlayerProfile> perfis = controller.getPlayerProfiles();
-//                if (ordem == null || ordem.isEmpty() || perfis == null || perfis.isEmpty()) return;
-//
-//                int w = getWidth();
-//                int h = getHeight();
-//
-//                int innerPad = 10;
-//                int gapTitle = 8;
-//                int badgeW   = 18, badgeH = 14;
-//
-//                java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
-//                java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-//
-//                // Fundo translúcido do box
-//                g2.setColor(new java.awt.Color(0, 0, 0, 110));
-//                g2.fillRoundRect(0, 0, w, h, 12, 12);
-//
-//                // Título
-//                g2.setColor(java.awt.Color.WHITE);
-//                g2.setFont(titleFont);
-//                int titleAscent = g2.getFontMetrics().getAscent();
-//                int titleDescent = g2.getFontMetrics().getDescent();
-//                int titleH = titleAscent + titleDescent;
-//                int titleBaseline = innerPad + titleAscent;
-//                g2.drawString("Ordem dos jogadores", innerPad + 2, titleBaseline);
-//
-//                // Lista
-//                g2.setFont(listFont);
-//                int fmAscent  = g2.getFontMetrics().getAscent();
-//                int fmDescent = g2.getFontMetrics().getDescent();
-//                int lineH = fmAscent + fmDescent + 4;
-//
-//                int cy = innerPad + titleH + gapTitle;
-//                for (int i = 0; i < ordem.size(); i++) {
-//                    int id = ordem.get(i);
-//                    banco_imobiliario_controller.PlayerProfile p = perfis.get(id);
-//
-//                    cy += lineH; // baseline da linha i
-//
-//                    // quadradinho da cor do jogador
-//                    g2.setColor(p.getCor());
-//                    g2.fillRoundRect(innerPad + 2,
-//                                     cy - fmAscent + (fmAscent - badgeH) / 2,
-//                                     badgeW, badgeH, 4, 4);
-//
-//                    // texto da linha
-//                    g2.setColor(java.awt.Color.WHITE);
-//                    String line = String.format("%dº  %s", i + 1, p.getNome());
-//                    g2.drawString(line, innerPad + 2 + badgeW + 10, cy);
-//                }
-//            } finally {
-//                g2.dispose();
-//            }
-//        }
-//        private static void fillWidth(javax.swing.JComponent c) {
-//            java.awt.Dimension pref = c.getPreferredSize();
-//            c.setMinimumSize(pref); // evita encolher demais na altura
-//            c.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height)); // libera largura total
-//            c.setAlignmentX(0f); // encosta à esquerda (opcional)
-//        }
-//    }
-    
-	 // =====================================================================================
-	 // Painel de SALDOS (mostra todos os jogadores + banco)
-	 // =====================================================================================
-	 private static final class MoneyPanel extends javax.swing.JPanel {
-	     private static final long serialVersionUID = 1L;
-	
-	     private final banco_imobiliario_controller.AppController controller;
-	
-	     private static final class Row {
-	         String nome;
-	         java.awt.Color cor;
-	         int saldo;
-	         boolean daVez;
-	         boolean ativo;
-	     }
-	     private final java.util.List<Row> rows = new java.util.ArrayList<>();
-	     private int saldoBanco = 0;
-	
-	     private final java.text.NumberFormat brl =
-	         java.text.NumberFormat.getCurrencyInstance(new java.util.Locale("pt","BR"));
-	
-	     MoneyPanel(banco_imobiliario_controller.AppController controller) {
-	         this.controller = controller;
-	         setOpaque(false);
-	         setAlignmentX(0f);
-	
-	         // Deixa ocupar toda a largura disponível na coluna (evita encolher os outros panels)
-	         java.awt.Dimension pref = getPreferredSize();
-	         setMinimumSize(pref);
-	         setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
-	         setAlignmentX(0f);
-	     }
-	
-	     /** Reconstroi a lista de linhas a partir do Model. Chame em TabuleiroFrame.update(). */
-	     void refreshFromModel(banco_imobiliario_models.GameModel m) {
-	         rows.clear();
-	         int idVez = m.getJogadorDaVez();
-	         var ordem  = controller.getOrdemJogadores();
-	         var perfis = controller.getPlayerProfiles();
+    // =========================================================================
+    // [8] Painel de SALDOS (mostra todos os jogadores + banco)
+    // =========================================================================
+    private static final class MoneyPanel extends javax.swing.JPanel {
+        private static final long serialVersionUID = 1L;
 
-	         java.util.List<Integer> ids = new java.util.ArrayList<>();
-	         if (ordem != null && !ordem.isEmpty()) ids.addAll(ordem);
-	         else if (perfis != null) for (var p : perfis) ids.add(p.getId());
+        private final banco_imobiliario_controller.AppController controller;
 
-	         for (Integer id : ids) {
-	             var p = perfis.get(id);
-	             Row r = new Row();
-	             r.nome  = (p != null ? p.getNome() : "J" + (id + 1));
-	             r.cor   = (p != null ? p.getCor()  : new java.awt.Color(200,200,200));
-	             r.saldo = m.getSaldoJogador(id);
-	             r.daVez = (id == idVez);
-	             r.ativo = m.isJogadorAtivo(id);
-	             rows.add(r);
-	         }
-	         saldoBanco = m.getSaldoBanco();
+        private static final class Row {
+            String nome;
+            java.awt.Color cor;
+            int saldo;
+            boolean daVez;
+            boolean ativo;
+        }
+        private final java.util.List<Row> rows = new java.util.ArrayList<Row>();
+        private int saldoBanco = 0;
 
-	         revalidate();
-	         repaint();
-	     }
-	
-	     /** Altura preferida dinâmica: título + uma linha por jogador + 1 linha “Banco”. */
-	     @Override
-	     public java.awt.Dimension getPreferredSize() {
-	         // título + N jogadores + linha do Banco
-	         java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
-	         java.awt.Graphics2D g2 = bi.createGraphics();
-	         java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
-	         java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-	         g2.setFont(titleFont);
-	         int titleH = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent();
-	         g2.setFont(listFont);
-	         int lineH  = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent() + 4;
-	         g2.dispose();
+        private final java.text.NumberFormat brl =
+            java.text.NumberFormat.getCurrencyInstance(new java.util.Locale("pt","BR"));
 
-	         int innerPad = 10, gapTitle = 8;
-	         int linhas = Math.max(0, rows.size()) + 1;
-	         int h = innerPad + titleH + gapTitle + linhas * lineH + innerPad + 10;
-	         return new java.awt.Dimension(236, h);
-	     }
-	     
-	     @Override
-	     public java.awt.Dimension getMaximumSize() {
-	         java.awt.Dimension d = getPreferredSize();
-	         return new java.awt.Dimension(Integer.MAX_VALUE, d.height);
-	     }
-	
-	     @Override protected void paintComponent(java.awt.Graphics g) {
-	         super.paintComponent(g);
-	         java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-	         try {
-	             g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-	
-	             int w = getWidth();
-	             int innerPad = 10, gapTitle = 8;
-	             int badgeW = 18, badgeH = 14;
-	
-	             // Fundo tipo card (igual ao OrderPanel)
-	             g2.setColor(new java.awt.Color(0, 0, 0, 110));
-	             g2.fillRoundRect(0, 0, w, getHeight(), 12, 12);
-	
-	             // Título
-	             java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
-	             java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-	             g2.setFont(titleFont);
-	             g2.setColor(java.awt.Color.WHITE);
-	             int titleAscent = g2.getFontMetrics().getAscent();
-	             int titleDescent = g2.getFontMetrics().getDescent();
-	             int titleH = titleAscent + titleDescent;
-	             int titleBase = innerPad + titleAscent;
-	             g2.drawString("Saldos", innerPad + 2, titleBase);
-	
-	             // Linhas
-	             g2.setFont(listFont);
-	             java.awt.FontMetrics fm = g2.getFontMetrics();
-	             int fmAscent  = fm.getAscent();
-	             int fmDescent = fm.getDescent();
-	             int lineH     = fmAscent + fmDescent + 4;
-	
-	             int cy = innerPad + titleH + gapTitle;
-	
-	             // Para alinhar valores à direita
-	             int paddingRight = 12;
-	             int moneyRightX = w - paddingRight;
-	
-	             // Jogadores
-	             for (Row r : rows) {
-	                 cy += lineH;
-	
-	                 // Label (badge + nome) à esquerda
-	                 int leftX = innerPad + 2;
-	
-	                 // badge cor
-	                 int badgeY = cy - fmAscent + (fmAscent - badgeH) / 2;
-	                 g2.setColor(r.cor);
-	                 g2.fillRoundRect(leftX, badgeY, badgeW, badgeH, 4, 4);
-	
-	                 // nome (negrito se for da vez; acinzentado se falido)
-	                 java.awt.Font nameFont = r.daVez
-	                         ? listFont.deriveFont(java.awt.Font.BOLD)
-	                         : listFont;
-	                 g2.setFont(nameFont);
-	                 g2.setColor(r.ativo ? java.awt.Color.WHITE : new java.awt.Color(200,200,200));
-	                 int nameX = leftX + badgeW + 6;
-	                 g2.drawString(r.nome + (r.ativo ? "" : " (falido)"), nameX, cy);
-	
-	                 // valor à direita
-	                 String val = brl.format(r.saldo);
-	                 int valW = fm.stringWidth(val);
-	                 g2.setFont(listFont);
-	                 g2.setColor(java.awt.Color.WHITE);
-	                 g2.drawString(val, moneyRightX - valW, cy);
-	             }
-	
-	             // Separador fino antes do banco (opcional)
-	             cy += Math.max(6, lineH / 3);
-	             g2.setColor(new java.awt.Color(255,255,255,60));
-	             g2.drawLine(innerPad + 2, cy, w - innerPad - 2, cy);
-	
-	             // Linha Banco
-	             cy += lineH;
-	             g2.setFont(listFont);
-	             g2.setColor(java.awt.Color.WHITE);
-	             String lblBanco = "Banco";
-	             g2.drawString(lblBanco, innerPad + 2, cy);
-	
-	             String valBanco = brl.format(saldoBanco);
-	             int valBW = fm.stringWidth(valBanco);
-	             g2.drawString(valBanco, moneyRightX - valBW, cy);
-	
-	         } finally {
-	             g2.dispose();
-	         }
-	     }
-	 }
+        MoneyPanel(banco_imobiliario_controller.AppController controller) {
+            this.controller = controller;
+            setOpaque(false);
+            setAlignmentX(0f);
 
+            // Ocupar largura total na coluna
+            java.awt.Dimension pref = getPreferredSize();
+            setMinimumSize(pref);
+            setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
+            setAlignmentX(0f);
+        }
 
+        /** Reconstroi a lista de linhas a partir do Model. Chame em TabuleiroFrame.update(). */
+        void refreshFromModel(banco_imobiliario_models.GameModel m) {
+            rows.clear();
+            int idVez = m.getJogadorDaVez();
 
-    
+            java.util.List<Integer> ordem = controller.getOrdemJogadores();
+            java.util.List<banco_imobiliario_controller.PlayerProfile> perfis = controller.getPlayerProfiles();
+
+            java.util.List<Integer> ids = new java.util.ArrayList<Integer>();
+            if (ordem != null && !ordem.isEmpty()) {
+                ids.addAll(ordem);
+            } else if (perfis != null) {
+                for (banco_imobiliario_controller.PlayerProfile p : perfis) {
+                    ids.add(p.getId());
+                }
+            }
+
+            for (Integer id : ids) {
+                banco_imobiliario_controller.PlayerProfile p = findProfileById(perfis, id);
+                Row r = new Row();
+                r.nome  = (p != null ? p.getNome() : "J" + (id + 1));
+                r.cor   = (p != null ? p.getCor()  : new java.awt.Color(200,200,200));
+                r.saldo = m.getSaldoJogador(id);
+                r.daVez = (id != null && id == idVez);
+                r.ativo = m.isJogadorAtivo(id);
+                rows.add(r);
+            }
+            saldoBanco = m.getSaldoBanco();
+
+            revalidate();
+            repaint();
+        }
+
+        private banco_imobiliario_controller.PlayerProfile findProfileById(
+                java.util.List<banco_imobiliario_controller.PlayerProfile> perfis, int id) {
+            if (perfis == null) return null;
+            for (banco_imobiliario_controller.PlayerProfile p : perfis) {
+                if (p.getId() == id) return p;
+            }
+            return null;
+        }
+
+        /** Altura preferida dinâmica: título + uma linha por jogador + 1 linha “Banco”. */
+        @Override
+        public java.awt.Dimension getPreferredSize() {
+            // Medidas de fonte
+            java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g2 = bi.createGraphics();
+            java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
+            java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
+            g2.setFont(titleFont);
+            int titleH = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent();
+            g2.setFont(listFont);
+            int lineH  = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent() + 4;
+            g2.dispose();
+
+            int innerPad = 10, gapTitle = 8;
+            int linhas = Math.max(0, rows.size()) + 1; // jogadores + Banco
+            int h = innerPad + titleH + gapTitle + linhas * lineH + innerPad + 10;
+            return new java.awt.Dimension(236, h);
+        }
+
+        @Override
+        public java.awt.Dimension getMaximumSize() {
+            java.awt.Dimension d = getPreferredSize();
+            return new java.awt.Dimension(Integer.MAX_VALUE, d.height);
+        }
+
+        @Override protected void paintComponent(java.awt.Graphics g) {
+            super.paintComponent(g);
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int w = getWidth();
+                int innerPad = 10, gapTitle = 8;
+                int badgeW = 18, badgeH = 14;
+
+                // Fundo tipo card
+                g2.setColor(new java.awt.Color(0, 0, 0, 110));
+                g2.fillRoundRect(0, 0, w, getHeight(), 12, 12);
+
+                // Título
+                java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
+                java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
+                g2.setFont(titleFont);
+                g2.setColor(java.awt.Color.WHITE);
+                int titleAscent = g2.getFontMetrics().getAscent();
+                int titleDescent = g2.getFontMetrics().getDescent();
+                int titleH = titleAscent + titleDescent;
+                int titleBase = innerPad + titleAscent;
+                g2.drawString("Saldos", innerPad + 2, titleBase);
+
+                // Linhas
+                g2.setFont(listFont);
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                int fmAscent  = fm.getAscent();
+                int fmDescent = fm.getDescent();
+                int lineH     = fmAscent + fmDescent + 4;
+
+                int cy = innerPad + titleH + gapTitle;
+
+                // Alinhamento à direita
+                int paddingRight = 12;
+                int moneyRightX = w - paddingRight;
+
+                // Jogadores
+                for (Row r : rows) {
+                    cy += lineH;
+
+                    int leftX = innerPad + 2;
+
+                    // badge cor
+                    int badgeY = cy - fmAscent + (fmAscent - badgeH) / 2;
+                    g2.setColor(r.cor);
+                    g2.fillRoundRect(leftX, badgeY, badgeW, badgeH, 4, 4);
+
+                    // nome
+                    java.awt.Font nameFont = r.daVez
+                            ? listFont.deriveFont(java.awt.Font.BOLD)
+                            : listFont;
+                    g2.setFont(nameFont);
+                    g2.setColor(r.ativo ? java.awt.Color.WHITE : new java.awt.Color(200,200,200));
+                    int nameX = leftX + badgeW + 6;
+                    g2.drawString(r.nome + (r.ativo ? "" : " (falido)"), nameX, cy);
+
+                    // valor à direita
+                    String val = brl.format(r.saldo);
+                    int valW = fm.stringWidth(val);
+                    g2.setFont(listFont);
+                    g2.setColor(java.awt.Color.WHITE);
+                    g2.drawString(val, moneyRightX - valW, cy);
+                }
+
+                // Separador fino antes do banco
+                cy += Math.max(6, lineH / 3);
+                g2.setColor(new java.awt.Color(255,255,255,60));
+                g2.drawLine(innerPad + 2, cy, w - innerPad - 2, cy);
+
+                // Banco
+                cy += lineH;
+                g2.setFont(listFont);
+                g2.setColor(java.awt.Color.WHITE);
+                String lblBanco = "Banco";
+                g2.drawString(lblBanco, innerPad + 2, cy);
+
+                String valBanco = brl.format(saldoBanco);
+                int valBW = fm.stringWidth(valBanco);
+                g2.drawString(valBanco, moneyRightX - valBW, cy);
+
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
+//  // =========================================================================
+//  // [9] Painel da ORDEM DOS JOGADORES (se quiser reativar)
+//  // =========================================================================
+//  private static final class OrderPanel extends javax.swing.JPanel {
+//      ...
+//  }
+
+    // =========================================================================
+    // [10] Observer do GameModel — recebe updates e sincroniza a UI
+    // =========================================================================
     @Override
     public void update(banco_imobiliario_models.GameModel m) {
         javax.swing.SwingUtilities.invokeLater(() -> {
@@ -763,11 +709,21 @@ implements banco_imobiliario_models.GameModel.Observer {
             atualizarUIJogadorDaVez();
 
             boardPanel.repaint();
-//            orderPanel.repaint();
+            // orderPanel.repaint();
 
             moneyPanel.refreshFromModel(m);
             moneyPanel.repaint();
+
+            // Habilita/desabilita o botão de carta conforme a casa atual
+            java.util.Optional<String> territorioAtual =
+                    m.getNomeDoTerritorioDaCasaAtualDoJogadorDaVez();
+            if (territorioAtual.isPresent()) {
+                nomeCasaParaExibir = territorioAtual.get();
+                btnCartaTerritorio.setEnabled(true);
+            } else {
+                nomeCasaParaExibir = null;
+                btnCartaTerritorio.setEnabled(false);
+            }
         });
     }
-    
 }

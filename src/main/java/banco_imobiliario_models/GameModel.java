@@ -912,5 +912,19 @@ public class GameModel {
 	public boolean passouOuCaiuNoInicioDaUltimaJogada() {
 		return false; 
 	}
+	
+	
+	/** Nome do território (propriedade) onde o jogador da vez está, se aplicável. */
+	public java.util.Optional<String> getNomeDoTerritorioDaCasaAtualDoJogadorDaVez() {
+	    exigirPartidaIniciada();
+	    exigirTabuleiroCarregado();
+	    final Jogador j = jogadores.get(getJogadorDaVez());
+	    final Casa c = tabuleiro.getCasa(j.getPosicao());
+	    if (c instanceof Propriedade) {
+	        return java.util.Optional.of(c.getNome());
+	    }
+	    return java.util.Optional.empty();
+	}
+
 
 }
