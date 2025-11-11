@@ -22,7 +22,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private final BoardPanel boardPanel;
     private final DicePanel  dicePanel;
     private final MoneyPanel moneyPanel;
-    // private final OrderPanel orderPanel;
 
     // Controles da lateral (fora do tabuleiro)
     private final javax.swing.JRadioButton rbAleatorio = new javax.swing.JRadioButton("Aleatório", true);
@@ -31,8 +30,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private final javax.swing.JComboBox<Integer> cbD2   = new javax.swing.JComboBox<>(new Integer[]{1,2,3,4,5,6});
     private final javax.swing.JLabel lblStatus          = new javax.swing.JLabel("Pronto.");
 
-    // Botão para exibir a carta do território
+    // Botões de ação (lateral)
     private final javax.swing.JButton btnCartaTerritorio = new javax.swing.JButton("Exibir carta do território");
+    private final javax.swing.JButton btnEncerrarVez     = new javax.swing.JButton("Encerrar vez");
+    private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar"); // <-- agora é campo
+
+    // Nome da casa atual (território) para o popup
     private String nomeCasaParaExibir = null;
 
     // =========================================================================
@@ -45,14 +48,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
         setResizable(false);
 
-        // Tamanho total da janela (tabuleiro + barra lateral)
         setSize(new java.awt.Dimension(1000, 780));
         setLocationRelativeTo(null);
 
         boardPanel = new BoardPanel(controller);
         dicePanel  = new DicePanel(controller);
         moneyPanel = new MoneyPanel(controller);
-        // orderPanel = new OrderPanel(controller);
 
         javax.swing.JPanel controls = buildControls(); // painel lateral
 
@@ -64,11 +65,17 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             }
         });
 
+        // Botão "Encerrar vez" — passa a vez (desabilitado em caso de DUPLA)
+        btnEncerrarVez.setEnabled(true);
+        btnEncerrarVez.setToolTipText("Encerrar as ações e passar a vez (desabilita se saiu dupla).");
+        btnEncerrarVez.addActionListener(e -> {
+            controller.getModel().encerrarAcoesDaVezEPassarTurno();
+        });
+
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
         getContentPane().add(controls, BorderLayout.EAST);
 
-        // Estado inicial dos combos
         cbD1.setEnabled(false);
         cbD2.setEnabled(false);
         atualizarUIJogadorDaVez();
@@ -77,13 +84,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     // =========================================================================
     // [3] Construção do painel lateral (dados, saldos, modo dos dados, ações)
     // =========================================================================
-    /** Painel lateral com controles e áreas dos dados/ordem (fora do tabuleiro). */
     private javax.swing.JPanel buildControls() {
         javax.swing.JPanel p = new javax.swing.JPanel(new BorderLayout(8, 8));
         p.setPreferredSize(new java.awt.Dimension(280, 780));
         p.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        // Topo: empilha área dos dados + (ordem) + saldos
+        // Topo: dados + saldos
         javax.swing.JPanel topStack = new javax.swing.JPanel();
         topStack.setOpaque(false);
         topStack.setLayout(new javax.swing.BoxLayout(topStack, javax.swing.BoxLayout.Y_AXIS));
@@ -118,14 +124,17 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
         p.add(center, BorderLayout.CENTER);
 
-        // Rodapé: Jogar + Carta + Status
+        // Rodapé: Jogar + Ações + Status
         javax.swing.JPanel south = new javax.swing.JPanel(new BorderLayout(4,4));
-        javax.swing.JButton btnJogar = new javax.swing.JButton("Jogar");
+
+        // usa o campo btnJogar
         btnJogar.addActionListener(this::onJogar);
 
         javax.swing.JPanel actions = new javax.swing.JPanel();
         actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.Y_AXIS));
         actions.add(btnJogar);
+        actions.add(javax.swing.Box.createVerticalStrut(6));
+        actions.add(btnEncerrarVez);
         actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnCartaTerritorio);
 
@@ -146,28 +155,34 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     }
 
     private void onJogar(java.awt.event.ActionEvent e) {
+        // Evita duplo clique no mesmo turno (UI guard) — o update() reabilita depois quando puder
+        btnJogar.setEnabled(false);
+
         banco_imobiliario_models.GameModel model = controller.getModel();
+        try {
+            // 1) Lançar dados (aleatório ou forçado)
+            if (rbManual.isSelected()) {
+                int d1 = (Integer) cbD1.getSelectedItem();
+                int d2 = (Integer) cbD2.getSelectedItem();
+                model.lancarDadosForcado(d1, d2);
+            } else {
+                model.lancarDados();
+            }
 
-        // 1) Lançar dados (aleatório ou forçado)
-        if (rbManual.isSelected()) {
-            int d1 = (Integer) cbD1.getSelectedItem();
-            int d2 = (Integer) cbD2.getSelectedItem();
-            model.lancarDadosForcado(d1, d2);
-        } else {
-            model.lancarDados();
+            // 2) Mover e aplicar efeitos obrigatórios
+            model.deslocarPiaoEAplicarObrigatorios();
+
+            // NÃO reabilita aqui. O update() decide com base no Model (podeLancarDadosNesteTurno).
+        } catch (RuntimeException ex) {
+            controller.exibirErro(ex.getMessage());
+            // Em caso de erro, não forçamos reabilitar aqui.
+            // O update() vai ajustar conforme o estado real do Model.
         }
-
-        // 2) Mover e aplicar efeitos obrigatórios (inclui IMPOSTO/LUCRO e ALUGUEL)
-        model.deslocarPiaoEAplicarObrigatorios();
-
-        // 3) Encerrar vez (regra de terceira dupla tratada no model)
-        model.encerrarAcoesDaVezEPassarTurno();
     }
 
     // =========================================================================
     // [5] Helpers de UI
     // =========================================================================
-    /** Atualiza rótulos e a cor da área dos dados conforme o jogador da vez. */
     private void atualizarUIJogadorDaVez() {
         int id = controller.getModel().getJogadorDaVez();
         banco_imobiliario_controller.PlayerProfile p = controller.getPlayerProfiles().stream()
@@ -177,14 +192,11 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         lblStatus.setText("Vez de: " + nome + "  (clique em Jogar)");
         dicePanel.setPlayerColor(p != null ? p.getCor() : new Color(200,200,200));
         dicePanel.repaint();
-        // orderPanel.repaint();
     }
 
-    /** Expõe repintura do tabuleiro e atualização rápida dos rótulos. */
     public void repaintBoard() {
         boardPanel.repaint();
         atualizarUIJogadorDaVez();
-        // orderPanel.repaint();
     }
 
     // =========================================================================
@@ -194,15 +206,15 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         private static final long serialVersionUID = 1L;
 
         private final banco_imobiliario_controller.AppController controller;
-        private java.awt.image.BufferedImage boardImage;           // imagem base 700x700
-        private final java.awt.image.BufferedImage[] pinImgs = new java.awt.image.BufferedImage[6]; // pinos 0..5
+        private java.awt.image.BufferedImage boardImage;
+        private final java.awt.image.BufferedImage[] pinImgs = new java.awt.image.BufferedImage[6];
 
-        private int side;                   // lado atual do tabuleiro desenhado (px)
-        private int originX, originY;       // canto superior esquerdo do tabuleiro desenhado
+        private int side;
+        private int originX, originY;
 
         BoardPanel(banco_imobiliario_controller.AppController controller) {
             this.controller = controller;
-            setPreferredSize(new java.awt.Dimension(740, 740)); // 700 + margens
+            setPreferredSize(new java.awt.Dimension(740, 740));
             setBackground(new Color(235, 235, 235));
             loadBoardImage();
             loadPinImages();
@@ -225,7 +237,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             }
         }
 
-        /** Carrega pinos em assets/pinos/pin0.png..pin5.png. */
         private void loadPinImages() {
             for (int i = 0; i < pinImgs.length; i++) {
                 try (java.io.InputStream is = getClass().getResourceAsStream("/assets/pinos/pin" + i + ".png")) {
@@ -304,7 +315,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 int cx = (int) Math.round(base.x) + offset.x;
                 int cy = (int) Math.round(base.y) + offset.y;
 
-                // Seleciona a imagem do pino pelo índice definido no diálogo
                 int idx = p.getPawnIndex();
                 java.awt.image.BufferedImage pin = (idx >= 0 && idx < pinImgs.length) ? pinImgs[idx] : null;
 
@@ -317,7 +327,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                     int pinH = (int) Math.round(cell * 0.85);
                     int pinW = (int) Math.round(pinH * (pin.getWidth() / (double) pin.getHeight()));
                     int x = cx - pinW / 2;
-                    int y = cy - pinH + 4; // ancora pelo "bico" do pino
+                    int y = cy - pinH + 4;
                     java.awt.Image scaled = pin.getScaledInstance(pinW, pinH, java.awt.Image.SCALE_SMOOTH);
                     g2.drawImage(scaled, x, y, null);
                 } else {
@@ -331,16 +341,15 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             }
         }
 
-        /** Fallback quando o índice do pino não estiver disponível. */
         private int indexForColor(java.awt.Color c) {
             if (c == null) return 5; // cinza
             java.awt.Color[] targets = {
-                new java.awt.Color(220, 50, 50),   // pin0 vermelho
-                new java.awt.Color(60, 100, 200),  // pin1 azul
-                new java.awt.Color(245, 150, 40),  // pin2 laranja
-                new java.awt.Color(250, 220, 40),  // pin3 amarelo
-                new java.awt.Color(180, 60, 200),  // pin4 roxo
-                new java.awt.Color(150, 150, 150)  // pin5 cinza
+                new java.awt.Color(220, 50, 50),
+                new java.awt.Color(60, 100, 200),
+                new java.awt.Color(245, 150, 40),
+                new java.awt.Color(250, 220, 40),
+                new java.awt.Color(180, 60, 200),
+                new java.awt.Color(150, 150, 150)
             };
             double best = java.lang.Double.MAX_VALUE;
             int bestIdx = 5;
@@ -392,7 +401,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     }
 
     // =========================================================================
-    // [7] Área visual dos DADOS (fora do tabuleiro)
+    // [7] Área visual dos DADOS
     // =========================================================================
     private static final class DicePanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
@@ -499,7 +508,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     }
 
     // =========================================================================
-    // [8] Painel de SALDOS (mostra todos os jogadores + banco)
+    // [8] Painel de SALDOS
     // =========================================================================
     private static final class MoneyPanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
@@ -524,14 +533,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             setOpaque(false);
             setAlignmentX(0f);
 
-            // Ocupar largura total na coluna
             java.awt.Dimension pref = getPreferredSize();
             setMinimumSize(pref);
             setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
             setAlignmentX(0f);
         }
 
-        /** Reconstroi a lista de linhas a partir do Model. Chame em TabuleiroFrame.update(). */
         void refreshFromModel(banco_imobiliario_models.GameModel m) {
             rows.clear();
             int idVez = m.getJogadorDaVez();
@@ -573,10 +580,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             return null;
         }
 
-        /** Altura preferida dinâmica: título + uma linha por jogador + 1 linha “Banco”. */
         @Override
         public java.awt.Dimension getPreferredSize() {
-            // Medidas de fonte
             java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
             java.awt.Graphics2D g2 = bi.createGraphics();
             java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
@@ -609,11 +614,9 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 int innerPad = 10, gapTitle = 8;
                 int badgeW = 18, badgeH = 14;
 
-                // Fundo tipo card
                 g2.setColor(new java.awt.Color(0, 0, 0, 110));
                 g2.fillRoundRect(0, 0, w, getHeight(), 12, 12);
 
-                // Título
                 java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
                 java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
                 g2.setFont(titleFont);
@@ -624,7 +627,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 int titleBase = innerPad + titleAscent;
                 g2.drawString("Saldos", innerPad + 2, titleBase);
 
-                // Linhas
                 g2.setFont(listFont);
                 java.awt.FontMetrics fm = g2.getFontMetrics();
                 int fmAscent  = fm.getAscent();
@@ -633,22 +635,18 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
                 int cy = innerPad + titleH + gapTitle;
 
-                // Alinhamento à direita
                 int paddingRight = 12;
                 int moneyRightX = w - paddingRight;
 
-                // Jogadores
                 for (Row r : rows) {
                     cy += lineH;
 
                     int leftX = innerPad + 2;
 
-                    // badge cor
                     int badgeY = cy - fmAscent + (fmAscent - badgeH) / 2;
                     g2.setColor(r.cor);
                     g2.fillRoundRect(leftX, badgeY, badgeW, badgeH, 4, 4);
 
-                    // nome
                     java.awt.Font nameFont = r.daVez
                             ? listFont.deriveFont(java.awt.Font.BOLD)
                             : listFont;
@@ -657,7 +655,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                     int nameX = leftX + badgeW + 6;
                     g2.drawString(r.nome + (r.ativo ? "" : " (falido)"), nameX, cy);
 
-                    // valor à direita
                     String val = brl.format(r.saldo);
                     int valW = fm.stringWidth(val);
                     g2.setFont(listFont);
@@ -665,12 +662,10 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                     g2.drawString(val, moneyRightX - valW, cy);
                 }
 
-                // Separador fino antes do banco
                 cy += Math.max(6, lineH / 3);
                 g2.setColor(new java.awt.Color(255,255,255,60));
                 g2.drawLine(innerPad + 2, cy, w - innerPad - 2, cy);
 
-                // Banco
                 cy += lineH;
                 g2.setFont(listFont);
                 g2.setColor(java.awt.Color.WHITE);
@@ -702,42 +697,47 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             atualizarUIJogadorDaVez();
 
             boardPanel.repaint();
-            // orderPanel.repaint();
-
             moneyPanel.refreshFromModel(m);
             moneyPanel.repaint();
 
-            // Habilita/desabilita o botão de carta conforme a casa atual
+            // ----- Nome do território (se for território e não tiver dono de outro) -----
             java.util.Optional<String> territorioAtual =
                     m.getNomeDoTerritorioDaCasaAtualDoJogadorDaVez();
+
+            boolean bloqueiaCarta = false;
+            try {
+                bloqueiaCarta = controller.getModel().isCasaAtualPropriedadeComDonoDeOutro();
+            } catch (Throwable ignore) {}
+
             if (territorioAtual.isPresent()) {
                 nomeCasaParaExibir = territorioAtual.get();
-                btnCartaTerritorio.setEnabled(true);
+                btnCartaTerritorio.setEnabled(!bloqueiaCarta);
             } else {
                 nomeCasaParaExibir = null;
                 btnCartaTerritorio.setEnabled(false);
             }
 
-            // NOVO: se o jogador acabou de sacar uma carta de Sorte/Revés, mostrar popup.
-            // O método deve "consumir" o evento para não repetir a exibição em updates futuros.
-         // Tenta mostrar carta Sorte/Revés, se o GameModel tiver esse método (sem travar a compilação).
+            // Habilita "Encerrar vez" APENAS se não saiu dupla
+            boolean saiuDupla = false;
+            try {
+                saiuDupla = m.houveDuplaNoUltimoLancamento();
+            } catch (Throwable ignore) {}
+            btnEncerrarVez.setEnabled(!saiuDupla);
+
+            // Popup de Sorte/Revés (one-shot)
             try {
                 java.lang.reflect.Method meth = m.getClass().getMethod("consumirSorteRevesRecemSacada");
-                Object opt = meth.invoke(m); // esperado: Optional<?>
+                Object opt = meth.invoke(m);
                 if (opt instanceof java.util.Optional) {
                     java.util.Optional<?> o = (java.util.Optional<?>) opt;
                     if (o.isPresent()) {
                         Object carta = o.get();
                         Integer num = null;
-
-                        // tenta carta.getNumero()
                         try {
                             java.lang.reflect.Method getNum = carta.getClass().getMethod("getNumero");
                             Object n = getNum.invoke(carta);
                             if (n instanceof Number) num = ((Number) n).intValue();
                         } catch (Exception ignore) {}
-
-                        // fallback: campo "numero"
                         if (num == null) {
                             try {
                                 java.lang.reflect.Field f = carta.getClass().getDeclaredField("numero");
@@ -746,18 +746,21 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                                 if (n instanceof Number) num = ((Number) n).intValue();
                             } catch (Exception ignore) {}
                         }
-
                         if (num != null) {
                             controller.exibirCartaSorteRevesPorNumero(num);
                         }
                     }
                 }
             } catch (NoSuchMethodException __) {
-                // versão do GameModel sem esse método -> ignora silenciosamente
+                // versão do GameModel sem esse método -> ignora
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
 
+            // ---- Habilita "Jogar" apenas quando o Model permitir (evita 2º clique no turno) ----
+            boolean podeJogar = false;
+            try { podeJogar = m.podeLancarDadosNesteTurno(); } catch (Throwable ignore) {}
+            btnJogar.setEnabled(podeJogar);
         });
     }
 }
