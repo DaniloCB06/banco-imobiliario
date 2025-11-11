@@ -11,8 +11,8 @@ import java.awt.*;
  * - Construir CASA
  * - Construir HOTEL
  *
- * O TabuleiroFrame não tem mais botões de compra/construção; ele apenas abre este diálogo.
- * O Controller decide o que habilitar e injeta callbacks (Runnables) para cada ação.
+ * Caso seja aberto apenas para visualização (ex.: Banco de Cartas),
+ * nenhum botão de ação é exibido.
  *
  * Compatível com o construtor antigo (sem ações).
  */
@@ -107,42 +107,51 @@ public final class CartaTerritorioDialog extends JDialog {
             add(taResumo, BorderLayout.NORTH);
         }
 
-        // ---------- Sul: ações ----------
+        // ---------- Sul ----------
         JPanel south = new JPanel(new BorderLayout(6, 6));
 
-        // Área dos botões de ação
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        // *** MODO VISUALIZAÇÃO PURA ***
+        // Se não há callbacks E todas as flags de habilitação são falsas,
+        // não exibimos os botões de ação (Comprar/Casa/Hotel).
+        boolean visualizacaoPura =
+                onComprar == null && onConstruirCasa == null && onConstruirHotel == null
+                        && !habilitarComprar && !habilitarCasa && !habilitarHotel;
 
-        // Comprar
-        btnComprar.setEnabled(habilitarComprar);
-        btnComprar.setToolTipText("Comprar este território (se não tiver dono e houver saldo)");
-        btnComprar.addActionListener(e -> {
-            invokeSafely(this.onComprar);
-            disposeAfterAction();
-        });
-        actions.add(btnComprar);
+        if (!visualizacaoPura) {
+            // Área dos botões de ação (somente quando não é visualização pura)
+            JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
 
-        // Construir casa
-        btnCasa.setEnabled(habilitarCasa);
-        btnCasa.setToolTipText("Construir UMA casa nesta queda (após já ser dono e em quedas subsequentes)");
-        btnCasa.addActionListener(e -> {
-            invokeSafely(this.onConstruirCasa);
-            disposeAfterAction();
-        });
-        actions.add(btnCasa);
+            // Comprar
+            btnComprar.setEnabled(habilitarComprar);
+            btnComprar.setToolTipText("Comprar este território (se não tiver dono e houver saldo)");
+            btnComprar.addActionListener(e -> {
+                invokeSafely(this.onComprar);
+                disposeAfterAction();
+            });
+            actions.add(btnComprar);
 
-        // Construir hotel
-        btnHotel.setEnabled(habilitarHotel);
-        btnHotel.setToolTipText("Construir UM hotel nesta queda (após já possuir ≥1 casa)");
-        btnHotel.addActionListener(e -> {
-            invokeSafely(this.onConstruirHotel);
-            disposeAfterAction();
-        });
-        actions.add(btnHotel);
+            // Construir casa
+            btnCasa.setEnabled(habilitarCasa);
+            btnCasa.setToolTipText("Construir UMA casa nesta queda (após já ser dono e em quedas subsequentes)");
+            btnCasa.addActionListener(e -> {
+                invokeSafely(this.onConstruirCasa);
+                disposeAfterAction();
+            });
+            actions.add(btnCasa);
 
-        south.add(actions, BorderLayout.WEST);
+            // Construir hotel
+            btnHotel.setEnabled(habilitarHotel);
+            btnHotel.setToolTipText("Construir UM hotel nesta queda (após já possuir ≥1 casa)");
+            btnHotel.addActionListener(e -> {
+                invokeSafely(this.onConstruirHotel);
+                disposeAfterAction();
+            });
+            actions.add(btnHotel);
 
-        // Botão fechar à direita
+            south.add(actions, BorderLayout.WEST);
+        }
+
+        // Botão fechar à direita (sempre presente)
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
         JButton fechar = new JButton("Fechar");
         fechar.addActionListener(e -> dispose());
@@ -161,12 +170,16 @@ public final class CartaTerritorioDialog extends JDialog {
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
 
-        // Enter ativa ação "principal" (se habilitada): Comprar > Casa > Hotel
-        getRootPane().setDefaultButton(
-            btnComprar.isEnabled() ? btnComprar :
-            (btnCasa.isEnabled() ? btnCasa :
-             (btnHotel.isEnabled() ? btnHotel : fechar))
-        );
+        // Enter: se for visualização pura, default = Fechar. Senão, prioriza ação principal.
+        if (visualizacaoPura) {
+            getRootPane().setDefaultButton(fechar);
+        } else {
+            getRootPane().setDefaultButton(
+                btnComprar.isEnabled() ? btnComprar :
+                (btnCasa.isEnabled() ? btnCasa :
+                 (btnHotel.isEnabled() ? btnHotel : fechar))
+            );
+        }
     }
 
     // =========================================================================
@@ -192,15 +205,12 @@ public final class CartaTerritorioDialog extends JDialog {
         try {
             r.run();
         } catch (Throwable t) {
-            // Mantemos silencioso para não travar UX; Controller/Model fazem validação.
-            // Se quiser logar: System.err.println("Ação falhou: " + t.getMessage());
+            // Controller/Model fazem validação; aqui não quebramos a UX.
         }
     }
 
     /** Fecha após a ação para que a tela principal atualize via Observer do Model. */
     private void disposeAfterAction() {
-        // Pequeno atraso (opcional) para evitar "salto" visual ao clicar rapidamente.
-        // Aqui optamos por fechar de imediato.
         dispose();
     }
 }

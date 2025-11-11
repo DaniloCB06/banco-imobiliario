@@ -13,12 +13,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 import java.text.Normalizer;
 
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import javax.swing.ImageIcon;
 
 import banco_imobiliario_models.GameModel;
 import banco_imobiliario_ui.DefinicaoJogadoresDialog;
@@ -54,6 +57,8 @@ public final class AppController {
             janelaAtual = new JanelaInicialFrame(this);
             janelaAtual.setVisible(true);
         });
+        // garante tabuleiro carregado para quem entrar direto
+        garantirTabuleiroCarregado();
     }
 
     public void iniciarNovaPartida(int nJogadores) {
@@ -115,47 +120,87 @@ public final class AppController {
     }
 
     // =========================================================================
-    // [4] Exibição de cartas de TERRITÓRIO (popup)
+    // [4] Exibição de cartas de TERRITÓRIO
     // =========================================================================
-    /** Abre diálogo da carta do território. Toda ação (comprar/construir) fica no diálogo. */
-    public void exibirCartaTerritorio(String nomeCasa) {
-        // Não abre se a casa atual tiver dono de outro jogador (aluguel é automático no Model).
-        try {
-            if (model.isCasaAtualPropriedadeComDonoDeOutro()) {
-                return;
-            }
-        } catch (Throwable ignore) {}
 
-        java.util.Optional<javax.swing.ImageIcon> icon = localizarIconeCarta(nomeCasa);
+    /**
+     * Abre diálogo da carta do território com ações (comprar/construir) quando aplicável.
+     * Se o nome parecer "Sorte/Revés #N", redireciona para o fluxo de SR.
+     */
+    public void exibirCartaTerritorio(String nomeCasa) {
+        // redireciona, se por engano vier "Sorte/Revés #N"
+        Integer srNum = detectarSorteRevesNoNome(nomeCasa);
+        if (srNum != null) {
+            exibirCartaSorteRevesPorNumero(srNum.intValue());
+            return;
+        }
+        exibirCartaTerritorioImpl((JFrame) janelaAtual, nomeCasa, /*somenteVisualizar*/ false);
+    }
+
+    /**
+     * Versão "somente visualização" (SEM botões). Use no Banco de Cartas.
+     */
+    public void exibirCartaTerritorioSomenteVisualizacao(String nomeCasa) {
+        Integer srNum = detectarSorteRevesNoNome(nomeCasa);
+        if (srNum != null) {
+            exibirCartaSorteRevesPorNumero(srNum.intValue());
+            return;
+        }
+        exibirCartaTerritorioImpl((JFrame) janelaAtual, nomeCasa, /*somenteVisualizar*/ true);
+    }
+
+    private Integer detectarSorteRevesNoNome(String nome) {
+        if (nome == null) return null;
+        String s = nome.toLowerCase(java.util.Locale.ROOT).trim();
+        Matcher m = Pattern.compile("sorte\\s*[/ ]?\\s*rev(?:e|é)s\\s*#?\\s*(\\d+)").matcher(s);
+        if (m.find()) {
+            try { return Integer.parseInt(m.group(1)); } catch (Exception ignore) {}
+        }
+        return null;
+    }
+
+    private void exibirCartaTerritorioImpl(JFrame owner, String nomeCasa, boolean somenteVisualizar) {
+        // Se for exibição normal (não-readonly), bloqueia se a casa atual tiver dono de outro.
+        if (!somenteVisualizar) {
+            try {
+                if (model.isCasaAtualPropriedadeComDonoDeOutro()) {
+                    return;
+                }
+            } catch (Throwable ignore) {}
+        }
+
+        java.util.Optional<ImageIcon> icon = localizarIconeCarta(nomeCasa);
         if (!icon.isPresent()) {
-            javax.swing.JOptionPane.showMessageDialog(
-                janelaAtual,
+            JOptionPane.showMessageDialog(
+                owner,
                 "Imagem da carta não encontrada para: " + nomeCasa +
                 "\nColoque o arquivo em assets/territorios (ou subpastas) com o nome correto.",
                 "Carta não encontrada",
-                javax.swing.JOptionPane.INFORMATION_MESSAGE
+                JOptionPane.INFORMATION_MESSAGE
             );
             return;
         }
 
-        // Estados de habilitação vindos do Model
         boolean habilitarComprar = false;
         boolean habilitarCasa    = false;
         boolean habilitarHotel   = false;
-        try { habilitarComprar = model.canComprarPropriedadeNaCasaAtual(); } catch (Throwable __) {}
-        try { habilitarCasa    = model.canConstruirCasaNaCasaAtual();     } catch (Throwable __) {}
-        try { habilitarHotel   = model.canConstruirHotelNaCasaAtual();    } catch (Throwable __) {}
 
-        // Abre via reflexão para ser compatível com as 3 variantes do dialog.
+        if (!somenteVisualizar) {
+            try { habilitarComprar = model.canComprarPropriedadeNaCasaAtual(); } catch (Throwable __) {}
+            try { habilitarCasa    = model.canConstruirCasaNaCasaAtual();     } catch (Throwable __) {}
+            try { habilitarHotel   = model.canConstruirHotelNaCasaAtual();    } catch (Throwable __) {}
+        }
+
         abrirDialogoCartaFlex(nomeCasa, icon.get(),
-                              habilitarComprar, habilitarCasa, habilitarHotel);
+                              habilitarComprar, habilitarCasa, habilitarHotel,
+                              somenteVisualizar);
     }
 
     /** Tenta construir casa; usado pelo diálogo. */
     public void construirCasaNaCasaAtual() {
         boolean ok = model.construirCasa();
         if (!ok) {
-            // JOptionPane.showMessageDialog(janelaAtual, "Não foi possível construir uma casa agora.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // opcional: JOptionPane.showMessageDialog(janelaAtual, "Não foi possível construir uma casa agora.", "Info", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -163,7 +208,7 @@ public final class AppController {
     public void construirHotelNaCasaAtual() {
         boolean ok = model.construirHotel();
         if (!ok) {
-            // JOptionPane.showMessageDialog(janelaAtual, "Não foi possível construir um hotel agora.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // opcional: JOptionPane.showMessageDialog(janelaAtual, "Não foi possível construir um hotel agora.", "Info", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -171,25 +216,45 @@ public final class AppController {
     public void comprarPropriedade() {
         boolean ok = model.comprarPropriedade();
         if (!ok) {
-            // JOptionPane.showMessageDialog(janelaAtual, "Não foi possível comprar esta propriedade.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            // opcional: JOptionPane.showMessageDialog(janelaAtual, "Não foi possível comprar esta propriedade.", "Info", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
     /**
      * Abre o CartaTerritorioDialog por reflexão, suportando:
-     *  (1) Construtor completo: (JFrame,String,ImageIcon,Runnable,Runnable,Runnable,boolean,boolean,boolean,String)
-     *  (2) Construtor médio:    (JFrame,String,ImageIcon,Runnable,boolean)
-     *  (3) Construtor simples:  (JFrame,String,ImageIcon)
+     *  (A) Somente visualização -> construtor simples: (JFrame,String,ImageIcon)
+     *  (B) Construtor completo:  (JFrame,String,ImageIcon,Runnable,Runnable,Runnable,boolean,boolean,boolean,String)
+     *  (C) Construtor médio:     (JFrame,String,ImageIcon,Runnable,boolean)
      */
     private void abrirDialogoCartaFlex(String titulo,
-                                       javax.swing.ImageIcon icon,
+                                       ImageIcon icon,
                                        boolean habilitarComprar,
                                        boolean habilitarCasa,
-                                       boolean habilitarHotel) {
+                                       boolean habilitarHotel,
+                                       boolean somenteVisualizar) {
         try {
             Class<?> clazz = Class.forName("banco_imobiliario_ui.CartaTerritorioDialog");
 
-            // (1) completo
+            // (A) SOMENTE VISUALIZAÇÃO: tenta o construtor simples (sem botões)
+            if (somenteVisualizar) {
+                try {
+                    java.lang.reflect.Constructor<?> c = clazz.getConstructor(
+                            javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class
+                    );
+                    Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, titulo, icon);
+                    if (dlg instanceof javax.swing.JDialog) {
+                        ((javax.swing.JDialog) dlg).setVisible(true);
+                        return;
+                    }
+                } catch (NoSuchMethodException ignore) {
+                    // se não houver o simples, cai para os demais, porém com botões desabilitados
+                    habilitarComprar = false;
+                    habilitarCasa = false;
+                    habilitarHotel = false;
+                }
+            }
+
+            // (B) completo
             try {
                 java.lang.reflect.Constructor<?> c = clazz.getConstructor(
                         javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class,
@@ -210,7 +275,7 @@ public final class AppController {
                 }
             } catch (NoSuchMethodException ignore) {}
 
-            // (2) médio (compra apenas)
+            // (C) médio (compra apenas)
             try {
                 java.lang.reflect.Constructor<?> c = clazz.getConstructor(
                         javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class,
@@ -220,20 +285,6 @@ public final class AppController {
                         (javax.swing.JFrame) janelaAtual, titulo, icon,
                         (Runnable) () -> { try { comprarPropriedade(); } catch (Throwable __) {} },
                         habilitarComprar
-                );
-                if (dlg instanceof javax.swing.JDialog) {
-                    ((javax.swing.JDialog) dlg).setVisible(true);
-                    return;
-                }
-            } catch (NoSuchMethodException ignore) {}
-
-            // (3) simples (apenas imagem)
-            try {
-                java.lang.reflect.Constructor<?> c = clazz.getConstructor(
-                        javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class
-                );
-                Object dlg = c.newInstance(
-                        (javax.swing.JFrame) janelaAtual, titulo, icon
                 );
                 if (dlg instanceof javax.swing.JDialog) {
                     ((javax.swing.JDialog) dlg).setVisible(true);
@@ -264,29 +315,46 @@ public final class AppController {
     // [4B] Exibição de cartas de SORTE/REVÉS (popup)
     // =========================================================================
     public void exibirCartaSorteRevesPorNumero(int numero) {
-        java.util.Optional<javax.swing.ImageIcon> icon = localizarIconeSorteReves(numero);
+        java.util.Optional<ImageIcon> icon = localizarIconeSorteReves(numero);
         String titulo = "Sorte/Revés #" + numero;
+
         if (icon.isPresent()) {
-            // usa construtor simples (dialog específico de SR pode ser outro arquivo)
+            // Preferir o CartaSorteRevesDialog se existir
             try {
-                Class<?> clazz = Class.forName("banco_imobiliario_ui.CartaTerritorioDialog");
+                Class<?> clazz = Class.forName("banco_imobiliario_ui.CartaSorteRevesDialog");
                 java.lang.reflect.Constructor<?> c = clazz.getConstructor(
-                        javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class
+                        javax.swing.JFrame.class, int.class, String.class, String.class, javax.swing.ImageIcon.class
                 );
-                Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, titulo, icon.get());
-                if (dlg instanceof javax.swing.JDialog) ((javax.swing.JDialog) dlg).setVisible(true);
+                Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, numero, titulo, "", icon.get());
+                if (dlg instanceof javax.swing.JDialog) {
+                    ((javax.swing.JDialog) dlg).setVisible(true);
+                    return;
+                }
+            } catch (ClassNotFoundException | NoSuchMethodException e) {
+                // Se não existir o dialog específico, tenta o de território no modo simples
+                try {
+                    Class<?> clazz = Class.forName("banco_imobiliario_ui.CartaTerritorioDialog");
+                    java.lang.reflect.Constructor<?> c = clazz.getConstructor(
+                            javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class
+                    );
+                    Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, titulo, icon.get());
+                    if (dlg instanceof javax.swing.JDialog) {
+                        ((javax.swing.JDialog) dlg).setVisible(true);
+                        return;
+                    }
+                } catch (Exception ignore) {}
             } catch (Exception e) {
-                // fallback mínimo
-                javax.swing.JOptionPane.showMessageDialog(janelaAtual, "Carta SR: " + titulo, "Sorte/Revés", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                e.printStackTrace();
             }
-        } else {
-            javax.swing.JOptionPane.showMessageDialog(
-                janelaAtual,
-                "Imagem da carta de Sorte/Revés não encontrada: " + titulo,
-                "Carta não encontrada",
-                javax.swing.JOptionPane.INFORMATION_MESSAGE
-            );
         }
+
+        // Fallback mínimo
+        JOptionPane.showMessageDialog(
+            janelaAtual,
+            "Carta de Sorte/Revés não encontrada: " + titulo,
+            "Carta não encontrada",
+            JOptionPane.INFORMATION_MESSAGE
+        );
     }
 
     public void exibirCartaSorteReves(banco_imobiliario_models.SorteRevesCard carta) {
@@ -294,25 +362,23 @@ public final class AppController {
         exibirCartaSorteRevesPorNumero(carta.getId());
     }
 
-    private java.util.Optional<javax.swing.ImageIcon> localizarIconeSorteReves(int numero) {
+    private java.util.Optional<ImageIcon> localizarIconeSorteReves(int numero) {
+        // nomes que você tem: "chanceN.png" (N = 1..30)
+        String[] patterns = {
+            "chance%02d.png", "chance%d.png",        // principal
+            "SR_%02d.png", "SR_%d.png",              // alternativas comuns
+            "SorteReves_%02d.png", "SorteReves_%d.png",
+            "sorte_reves_%02d.png", "sorte_reves_%d.png",
+            "%02d.png", "%d.png"                     // última chance
+        };
+
+        // 1) classpath
         String[] basesClasspath = {
             "/assets/sorte_reves/",
             "/assets/sorte-reves/",
-            "/assets/sortereves/"
+            "/assets/sortereves/",
+            "/assets/territorios/"                   // caso estejam aqui
         };
-        String[] basesFS = {
-            "assets/sorte_reves",
-            "assets/sorte-reves",
-            "assets/sortereves"
-        };
-        String[] patterns = {
-            "SR_%02d.png", "SR_%d.png",
-            "SorteReves_%02d.png", "SorteReves_%d.png",
-            "sorte_reves_%02d.png", "sorte_reves_%d.png",
-            "chance%02d.png", "chance%d.png",
-            "%02d.png", "%d.png"
-        };
-        // 1) classpath
         for (String base : basesClasspath) {
             for (String p : patterns) {
                 String name = String.format(java.util.Locale.ROOT, p, numero);
@@ -321,7 +387,7 @@ public final class AppController {
                     is = getClass().getResourceAsStream(base + name);
                     if (is != null) {
                         byte[] bytes = readAllBytes8(is);
-                        return java.util.Optional.of(new javax.swing.ImageIcon(bytes));
+                        return java.util.Optional.of(new ImageIcon(bytes));
                     }
                 } catch (Exception ignore) {
                 } finally {
@@ -330,7 +396,13 @@ public final class AppController {
             }
         }
 
-        // 2) filesystem
+        // 2) filesystem (diretórios explícitos)
+        String[] basesFS = {
+            "assets/sorte_reves",
+            "assets/sorte-reves",
+            "assets/sortereves",
+            "assets/territorios"
+        };
         for (java.io.File root : possibleRoots()) {
             for (String base : basesFS) {
                 java.io.File dir = new java.io.File(root, base);
@@ -338,36 +410,36 @@ public final class AppController {
                     String name = String.format(java.util.Locale.ROOT, p, numero);
                     java.io.File f = resolveFileCaseInsensitive(dir, name);
                     if (f != null && f.exists()) {
-                        return java.util.Optional.of(new javax.swing.ImageIcon(f.getAbsolutePath()));
+                        return java.util.Optional.of(new ImageIcon(f.getAbsolutePath()));
                     }
                 }
             }
         }
 
-        // 3) recursiva por sufixo
+        // 3) busca recursiva dentro de "assets"
         for (java.io.File root : possibleRoots()) {
             java.io.File assets = new java.io.File(root, "assets");
-            java.io.File found = findRecursivelyBySuffixIgnoreCase(
-                assets,
-                new String[] { String.format(java.util.Locale.ROOT, "_%02d.png", numero),
-                               String.format(java.util.Locale.ROOT, "_%d.png", numero),
-                               String.format(java.util.Locale.ROOT, "%02d.png", numero),
-                               String.format(java.util.Locale.ROOT, "%d.png", numero) },
-                3
-            );
-            if (found != null) {
-                return java.util.Optional.of(new javax.swing.ImageIcon(found.getAbsolutePath()));
+            // tenta por nome exato
+            for (String p : patterns) {
+                String name = String.format(java.util.Locale.ROOT, p, numero);
+                java.io.File f = findRecursivelyByNameIgnoreCase(assets, name, 3);
+                if (f != null) return java.util.Optional.of(new ImageIcon(f.getAbsolutePath()));
             }
+            // fallback por sufixo específico
+            String suf1 = String.format(java.util.Locale.ROOT, "chance%02d.png", numero);
+            String suf2 = String.format(java.util.Locale.ROOT, "chance%d.png", numero);
+            java.io.File f2 = findRecursivelyBySuffixIgnoreCase(assets, new String[]{suf1, suf2}, 3);
+            if (f2 != null) return java.util.Optional.of(new ImageIcon(f2.getAbsolutePath()));
         }
 
-        System.out.println("[Carta Sorte/Revés] não encontrada: #" + numero);
+        System.out.println("[Carta Sorte/Revés] não encontrada: chance" + numero + ".png");
         return java.util.Optional.empty();
     }
 
     // =========================================================================
     // [4C] Imagem de TERRITÓRIO
     // =========================================================================
-    private java.util.Optional<javax.swing.ImageIcon> localizarIconeCarta(String nomeCasa) {
+    private java.util.Optional<ImageIcon> localizarIconeCarta(String nomeCasa) {
         String key = chaveCarta(nomeCasa);
         String arquivo = MAPEAMENTO_CARTAS.get(key);
         if (arquivo == null) arquivo = nomeCasa + ".png";
@@ -380,7 +452,7 @@ public final class AppController {
                 is = getClass().getResourceAsStream(base + arquivo);
                 if (is != null) {
                     byte[] bytes = readAllBytes8(is);
-                    return java.util.Optional.of(new javax.swing.ImageIcon(bytes));
+                    return java.util.Optional.of(new ImageIcon(bytes));
                 }
             } catch (Exception ignore) {
             } finally {
@@ -395,7 +467,7 @@ public final class AppController {
                 java.io.File dir = new java.io.File(root, sub);
                 java.io.File f = resolveFileCaseInsensitive(dir, arquivo);
                 if (f != null && f.exists()) {
-                    return java.util.Optional.of(new javax.swing.ImageIcon(f.getAbsolutePath()));
+                    return java.util.Optional.of(new ImageIcon(f.getAbsolutePath()));
                 }
             }
         }
@@ -405,7 +477,7 @@ public final class AppController {
             java.io.File assets = new java.io.File(root, "assets");
             java.io.File f = findRecursivelyByNameIgnoreCase(assets, arquivo, 3);
             if (f != null) {
-                return java.util.Optional.of(new javax.swing.ImageIcon(f.getAbsolutePath()));
+                return java.util.Optional.of(new ImageIcon(f.getAbsolutePath()));
             }
         }
 
@@ -442,6 +514,7 @@ public final class AppController {
         m.put("morumbi",                        "Morumbi.png");
         m.put("rua augusta",                    "Rua Augusta.png");
 
+        // mapeamentos tolerantes para a Faria Lima (arquivo que você tem)
         m.put("av. brig. faria lima",           "Av. Brigadero Faria Lima.png");
         m.put("av brig. faria lima",            "Av. Brigadero Faria Lima.png");
         m.put("av. brig faria lima",            "Av. Brigadero Faria Lima.png");
@@ -601,7 +674,7 @@ public final class AppController {
 
     private java.io.File resolveFileCaseInsensitive(java.io.File dir, String fileName) {
         try {
-            if (!dir.isDirectory()) return null;
+            if (dir == null || !dir.isDirectory()) return null;
             java.io.File exact = new java.io.File(dir, fileName);
             if (exact.exists()) return exact;
             String target = fileName.toLowerCase(java.util.Locale.ROOT);

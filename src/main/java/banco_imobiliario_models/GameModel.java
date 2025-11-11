@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.HashMap;
 import java.text.Normalizer;
 import java.util.Locale;
 
@@ -13,7 +16,7 @@ import java.util.Locale;
  * API pública do Model (Iteração 1 + Sorte/Revés).
  *
  * Regras cobertas: #1, #2, #3, #4, #5, #6, #7.
- * Extensão: Sorte/Revés (baralho, banco por jogador, sorteio ao cair na casa ?)
+ * Extensão: Sorte/Revés (baralho simples interno + banco por jogador).
  */
 public class GameModel {
 
@@ -40,7 +43,7 @@ public class GameModel {
     private boolean jaConstruiuNestaQueda = false;
     private boolean acabouDeComprarNestaQueda = false;
 
-    // Sinalização de 3ª dupla consecutiva (mantido por compatibilidade)
+    // Sinalização de 3ª dupla consecutiva
     private boolean deveIrParaPrisaoPorTerceiraDupla = false;
 
     /** DTO imutável para resultado dos dados. */
@@ -54,45 +57,77 @@ public class GameModel {
     }
 
     // =====================================================================================
-    // SORTE/REVÉS — CAMPOS E SUPORTE
+    // SORTE/REVÉS — IMPLEMENTAÇÃO INTERNA (sem dependências externas)
     // =====================================================================================
 
-    /** RNG independente para o baralho de Sorte/Revés. */
+    /** Cartinha simples apenas com número e rótulo (imagem opcional). */
+    public static final class SorteRevesCard {
+        private final int numero;
+        private final String rotulo;       // ex.: "Sorte/Revés #05"
+        private final String imagemArquivo; // opcional (pode ser null)
+        public SorteRevesCard(int n) {
+            this.numero = n;
+            this.rotulo = String.format(Locale.ROOT, "Sorte/Revés #%02d", n);
+            this.imagemArquivo = null;
+        }
+        public int getNumero() { return numero; }
+        public String getRotulo() { return rotulo; }
+        public String getImagemArquivo() { return imagemArquivo; }
+    }
+
+    /** RNG para baralho. */
     private Random rngSorteReves;
 
-    /** Gerente do baralho e do banco de cartas por jogador (classe EXTERNA). */
-    private final SorteRevesManager sorteReves = new SorteRevesManager();
+    /** Tamanho do baralho e posição do próximo sorteio (circular). */
+    private int tamanhoBaralhoSR = 30;
+    private int ponteiroBaralhoSR = 0;
 
-    /** Buffer one-shot para a UI exibir popup (consumido em TabuleiroFrame.update). */
+    /** Armazena as cartas (números) que cada jogador possui. */
+    private final Map<Integer, Set<Integer>> cartasSRPorJogador = new HashMap<>();
+
+    /** Última carta sorteada (para consultas) e buffer one-shot para a UI. */
+    private Optional<SorteRevesCard> ultimaCartaSR = Optional.empty();
     private Optional<SorteRevesCard> srRecemSacada = Optional.empty();
 
     /** Configura um baralho padrão com N cartas genéricas numeradas 1..N. */
     public void configurarBaralhoSorteRevesPadrao(int totalCartas) {
         if (totalCartas <= 0) totalCartas = 20;
-        sorteReves.resetarSequenciaPadrao(totalCartas);
+        this.tamanhoBaralhoSR = totalCartas;
+        this.ponteiroBaralhoSR = 0;
     }
 
     /** Última carta sorteada (consulta simples, não consome). */
     public Optional<SorteRevesCard> getUltimaCartaSorteReves() {
-        return sorteReves.getUltimaCarta();
+        return ultimaCartaSR;
     }
 
     /** Banco de cartas do jogador (IDs das cartas em posse). */
     public Set<Integer> getCartasSorteRevesDoJogador(int jogadorId) {
-        return sorteReves.getCartasDoJogador(jogadorId);
+        return cartasSRPorJogador.getOrDefault(jogadorId, new HashSet<>());
     }
 
-    /** Consumido pela UI para mostrar a imagem 1x só após o sorteio. */
+    /** Consumido pela UI para mostrar a imagem/rotulo 1x só após o sorteio. */
     public Optional<SorteRevesCard> consumirSorteRevesRecemSacada() {
         Optional<SorteRevesCard> out = srRecemSacada;
         srRecemSacada = Optional.empty();
         return out;
     }
 
+    /** Sorteia e entrega uma carta simples ao jogador. */
+    private SorteRevesCard sortearCartaParaJogador(int jogadorId) {
+        if (tamanhoBaralhoSR <= 0) tamanhoBaralhoSR = 20;
+        int numero = (ponteiroBaralhoSR % tamanhoBaralhoSR) + 1;
+        ponteiroBaralhoSR++;
+        SorteRevesCard card = new SorteRevesCard(numero);
+        cartasSRPorJogador.computeIfAbsent(jogadorId, k -> new HashSet<>()).add(numero);
+        ultimaCartaSR = Optional.of(card);
+        srRecemSacada = Optional.of(card);
+        return card;
+    }
+
     /** Heurística para identificar casa do tipo Sorte/Revés (ajuste se necessário). */
     private boolean isCasaSorteReves(Casa c) {
         if (c == null) return false;
-
         String tipo = c.getTipo() == null ? "" : c.getTipo();
         String nome = c.getNome() == null ? "" : c.getNome();
 
@@ -103,19 +138,14 @@ public class GameModel {
             n = n.replace('/', '_').replace('-', '_').replace(' ', '_');
             return n.toUpperCase(Locale.ROOT);
         };
-
         String T = norm.apply(tipo);
         String N = norm.apply(nome);
 
-        // aceita várias grafias/sinônimos
         if (T.contains("CHANCE") || N.contains("CHANCE")) return true;
         if ((T.contains("SORTE") && (T.contains("REVES") || T.contains("REVEZ"))) ||
             (N.contains("SORTE") && (N.contains("REVES") || N.contains("REVEZ")))) return true;
-
-        // alguns tabuleiros usam apenas um "?"
         if (tipo.contains("?") || nome.contains("?")) return true;
 
-        // compatibilidade com versões antigas
         return T.equals("SORTE_REVES") || T.equals("INTERROGACAO") || T.equals("SORTE_REVEZ");
     }
 
@@ -128,12 +158,15 @@ public class GameModel {
             throw new IllegalArgumentException("Número de jogadores deve estar entre 2 e 6.");
         }
         this.rng = new RandomProvider(seedOpcional);
-        this.turno = new Turno(numJogadores); // ordem padrão 0..N-1 até definirem outra
+        this.turno = new Turno(numJogadores);
         this.banco = new Banco(200_000);
 
         this.jogadores.clear();
+        cartasSRPorJogador.clear();
+
         for (int i = 0; i < numJogadores; i++) {
             this.jogadores.add(new Jogador(i, 4000));
+            cartasSRPorJogador.put(i, new HashSet<>());
         }
 
         long seedSR = (seedOpcional != null) ? seedOpcional + 13L : System.nanoTime();
@@ -143,6 +176,7 @@ public class GameModel {
         this.ultimoD1 = this.ultimoD2 = null;
         this.jaLancouNesteTurno = false;
         this.deveIrParaPrisaoPorTerceiraDupla = false;
+        this.ultimaCartaSR = Optional.empty();
         this.srRecemSacada = Optional.empty();
         limparContextoDeQueda();
         notifyObservers();
@@ -225,8 +259,12 @@ public class GameModel {
 
     public boolean houveDuplaNoUltimoLancamento() {
         exigirPartidaIniciada();
-        return turno.houveDupla();
+        // Se o jogador da vez está preso, não consideramos a rolagem como "dupla" para fins de UI
+        // (isso permite encerrar a vez e o jogo não fica travado).
+        boolean preso = jogadores.get(getJogadorDaVez()).isNaPrisao();
+        return !preso && turno.houveDupla();
     }
+
 
     public int getContagemDuplasConsecutivasDaVez() {
         exigirPartidaIniciada();
@@ -311,11 +349,11 @@ public class GameModel {
 
         // SORTE/REVÉS: sorteia ao cair
         if (isCasaSorteReves(casaAtual)) {
-            srRecemSacada = sorteReves.sortearParaJogador(id, rngSorteReves); // buffer para UI
+            sortearCartaParaJogador(id); // preenche ultimaCartaSR + srRecemSacada e adiciona ao "banco"
             notifyObservers();
         }
 
-        // === NOVO: se houve DUPLA e o jogador não está preso, libera nova rolagem neste turno ===
+        // Se houve DUPLA e o jogador não está preso, libera nova rolagem neste turno
         if (turno.houveDupla() && !jogadores.get(getJogadorDaVez()).isNaPrisao()) {
             this.jaLancouNesteTurno = false;
         }
@@ -666,7 +704,7 @@ public class GameModel {
     }
 
     // =====================================================================================
-    // CONSULTAS
+    // CONSULTAS PARA UI
     // =====================================================================================
 
     public int getPosicaoJogador(int idJogador) {
@@ -702,6 +740,115 @@ public class GameModel {
     public boolean isJogadorDaVezNaPrisao() {
         exigirPartidaIniciada();
         return jogadores.get(getJogadorDaVez()).isNaPrisao();
+    }
+
+    /** Atalho direto para habilitar o botão "Exibir/Abrir banco de cartas" na UI. */
+    public boolean podeAbrirBancoDeCartasJogadorDaVez() {
+        return jogadorPossuiAlgumaCartaOuPropriedade(getJogadorDaVez());
+    }
+
+    // =============================== Banco de cartas (para UI) ===============================
+
+    public static final class BancoDeCartasItem {
+        public static enum Tipo { TERRITORIO, SORTE_REVES }
+        private final Tipo tipo;
+        private final String nome;              // ex.: "Av. Paulista" ou "Sorte/Revés #05"
+        private final Integer numeroSorteReves; // se SORTE_REVES
+        private final Integer posicaoTabuleiro; // se TERRITORIO
+        public BancoDeCartasItem(Tipo tipo, String nome, Integer numeroSorteReves, Integer posicaoTabuleiro) {
+            this.tipo = tipo;
+            this.nome = nome;
+            this.numeroSorteReves = numeroSorteReves;
+            this.posicaoTabuleiro = posicaoTabuleiro;
+        }
+        public Tipo getTipo() { return tipo; }
+        public String getNome() { return nome; }
+        public Integer getNumeroSorteReves() { return numeroSorteReves; }
+        public Integer getPosicaoTabuleiro() { return posicaoTabuleiro; }
+    }
+
+    /** Retorna os nomes das propriedades do jogador (para habilitação da UI). */
+    public List<String> getNomesPropriedadesDoJogador(int idJogador) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        Jogador dono = jogadores.get(idJogador);
+        List<String> nomes = new ArrayList<>();
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (c instanceof Propriedade) {
+                Propriedade p = (Propriedade) c;
+                if (p.temDono() && p.getDono() == dono) {
+                    nomes.add(p.getNome());
+                }
+            }
+        }
+        return nomes;
+    }
+
+    /** True se o jogador possui ao menos uma propriedade ou alguma carta de Sorte/Revés. */
+    public boolean jogadorPossuiAlgumaCartaOuPropriedade(int idJogador) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        boolean temProp = !getNomesPropriedadesDoJogador(idJogador).isEmpty();
+        boolean temSR   = !getCartasSorteRevesDoJogador(idJogador).isEmpty();
+        return temProp || temSR;
+    }
+
+    /** Lista consolidada para a janela do “banco de cartas”. */
+    public List<BancoDeCartasItem> getBancoDeCartasDoJogador(int idJogador) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        if (idJogador < 0 || idJogador >= jogadores.size()) {
+            throw new IllegalArgumentException("idJogador inválido");
+        }
+        Jogador dono = jogadores.get(idJogador);
+        List<BancoDeCartasItem> items = new ArrayList<>();
+
+        // Territórios do jogador
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (c instanceof Propriedade) {
+                Propriedade p = (Propriedade) c;
+                if (p.temDono() && p.getDono() == dono) {
+                    items.add(new BancoDeCartasItem(
+                            BancoDeCartasItem.Tipo.TERRITORIO,
+                            p.getNome(),
+                            null,
+                            p.getPosicao()
+                    ));
+                }
+            }
+        }
+
+        // Cartas Sorte/Revés
+        for (Integer num : getCartasSorteRevesDoJogador(idJogador)) {
+            items.add(new BancoDeCartasItem(
+                    BancoDeCartasItem.Tipo.SORTE_REVES,
+                    String.format(Locale.ROOT, "Sorte/Revés #%02d", num),
+                    num,
+                    null
+            ));
+        }
+
+        return items;
+    }
+
+    /** Nome do território onde o jogador da vez está, se aplicável. */
+    public Optional<String> getNomeDoTerritorioDaCasaAtualDoJogadorDaVez() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+        final Jogador j = jogadores.get(getJogadorDaVez());
+        final Casa c = tabuleiro.getCasa(j.getPosicao());
+        if (c instanceof Propriedade) {
+            return Optional.of(c.getNome());
+        }
+        return Optional.empty();
     }
 
     // =====================================================================================
@@ -995,16 +1142,4 @@ public class GameModel {
     public Integer getUltimoD2() { return ultimoD2; }
     public boolean houveDupla() { return turno != null && turno.houveDupla(); }
     public boolean passouOuCaiuNoInicioDaUltimaJogada() { return false; }
-
-    /** Nome do território onde o jogador da vez está, se aplicável. */
-    public Optional<String> getNomeDoTerritorioDaCasaAtualDoJogadorDaVez() {
-        exigirPartidaIniciada();
-        exigirTabuleiroCarregado();
-        final Jogador j = jogadores.get(getJogadorDaVez());
-        final Casa c = tabuleiro.getCasa(j.getPosicao());
-        if (c instanceof Propriedade) {
-            return Optional.of(c.getNome());
-        }
-        return Optional.empty();
-    }
 }

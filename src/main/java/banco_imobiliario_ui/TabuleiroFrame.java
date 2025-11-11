@@ -33,7 +33,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     // Botões de ação (lateral)
     private final javax.swing.JButton btnCartaTerritorio = new javax.swing.JButton("Exibir carta do território");
     private final javax.swing.JButton btnEncerrarVez     = new javax.swing.JButton("Encerrar vez");
-    private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar"); // <-- agora é campo
+    private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar");
+    private final javax.swing.JButton btnBancoCartas     = new javax.swing.JButton("Abrir banco de cartas");
 
     // Nome da casa atual (território) para o popup
     private String nomeCasaParaExibir = null;
@@ -71,6 +72,10 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         btnEncerrarVez.addActionListener(e -> {
             controller.getModel().encerrarAcoesDaVezEPassarTurno();
         });
+
+        // Botão "Abrir banco de cartas" — visível ao lado dos demais
+        btnBancoCartas.setEnabled(false);
+        btnBancoCartas.addActionListener(e -> abrirBancoDeCartas());
 
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
@@ -136,6 +141,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnEncerrarVez);
         actions.add(javax.swing.Box.createVerticalStrut(6));
+        actions.add(btnBancoCartas);        // <-- botão inserido
+        actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnCartaTerritorio);
 
         lblStatus.setFont(lblStatus.getFont().deriveFont(java.awt.Font.PLAIN, 12f));
@@ -175,8 +182,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             // NÃO reabilita aqui. O update() decide com base no Model (podeLancarDadosNesteTurno).
         } catch (RuntimeException ex) {
             controller.exibirErro(ex.getMessage());
-            // Em caso de erro, não forçamos reabilitar aqui.
-            // O update() vai ajustar conforme o estado real do Model.
+            // Em caso de erro, não reabilitamos aqui; o update() ajusta conforme o estado real.
         }
     }
 
@@ -761,6 +767,45 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             boolean podeJogar = false;
             try { podeJogar = m.podeLancarDadosNesteTurno(); } catch (Throwable ignore) {}
             btnJogar.setEnabled(podeJogar);
+
+            // ---- Habilita "Abrir banco de cartas" somente se o jogador da vez tiver algo ----
+            try {
+                int idVez = m.getJogadorDaVez();
+                boolean podeAbrirBanco = m.jogadorPossuiAlgumaCartaOuPropriedade(idVez);
+                btnBancoCartas.setEnabled(podeAbrirBanco);
+            } catch (Throwable ignore) {
+                btnBancoCartas.setEnabled(false);
+            }
         });
+    }
+
+    // =========================================================================
+    // [10] Abertura do diálogo de Banco de Cartas
+    // =========================================================================
+    private void abrirBancoDeCartas() {
+        banco_imobiliario_models.GameModel model = controller.getModel();
+        int idVez = model.getJogadorDaVez();
+
+        // Segurança extra: só abre se realmente houver algo
+        if (!model.jogadorPossuiAlgumaCartaOuPropriedade(idVez)) {
+            controller.exibirErro("Você não possui cartas no banco ainda.");
+            return;
+        }
+
+        // Título com o nome do jogador da vez
+        String nomeJogador = controller.getPlayerProfiles().stream()
+                .filter(pp -> pp.getId() == idVez)
+                .map(banco_imobiliario_controller.PlayerProfile::getNome)
+                .findFirst()
+                .orElse("Jogador " + (idVez + 1));
+        String titulo = "Banco de cartas — " + nomeJogador;
+
+        // Lista consolidada (territórios + sorte/revés) para o diálogo
+        java.util.List<banco_imobiliario_models.GameModel.BancoDeCartasItem> itens =
+                model.getBancoDeCartasDoJogador(idVez);
+
+        // Construtor do seu BancoDeCartasDialog (owner, controller, titulo, itens)
+        BancoDeCartasDialog dlg = new BancoDeCartasDialog(this, controller, titulo, itens);
+        dlg.setVisible(true);
     }
 }
