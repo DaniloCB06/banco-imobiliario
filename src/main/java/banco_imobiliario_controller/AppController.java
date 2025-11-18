@@ -315,8 +315,14 @@ public final class AppController {
     // [4B] Exibição de cartas de SORTE/REVÉS (popup)
     // =========================================================================
     public void exibirCartaSorteRevesPorNumero(int numero) {
+        banco_imobiliario_models.GameModel.SorteRevesCard info =
+                model.getCartaSorteRevesPorNumero(numero).orElse(null);
+
+        String tituloBase = "Sorte/Revés #" + numero;
+        String tituloCarta = info != null ? info.getTitulo() : tituloBase;
+        String descricao = info != null ? info.getDescricao() : "";
+
         java.util.Optional<ImageIcon> icon = localizarIconeSorteReves(numero);
-        String titulo = "Sorte/Revés #" + numero;
 
         if (icon.isPresent()) {
             // Preferir o CartaSorteRevesDialog se existir
@@ -325,7 +331,7 @@ public final class AppController {
                 java.lang.reflect.Constructor<?> c = clazz.getConstructor(
                         javax.swing.JFrame.class, int.class, String.class, String.class, javax.swing.ImageIcon.class
                 );
-                Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, numero, titulo, "", icon.get());
+                Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, numero, tituloCarta, descricao, icon.get());
                 if (dlg instanceof javax.swing.JDialog) {
                     ((javax.swing.JDialog) dlg).setVisible(true);
                     return;
@@ -337,7 +343,8 @@ public final class AppController {
                     java.lang.reflect.Constructor<?> c = clazz.getConstructor(
                             javax.swing.JFrame.class, String.class, javax.swing.ImageIcon.class
                     );
-                    Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, titulo, icon.get());
+                    String tituloDialogo = tituloBase + " — " + tituloCarta;
+                    Object dlg = c.newInstance((javax.swing.JFrame) janelaAtual, tituloDialogo, icon.get());
                     if (dlg instanceof javax.swing.JDialog) {
                         ((javax.swing.JDialog) dlg).setVisible(true);
                         return;
@@ -348,18 +355,23 @@ public final class AppController {
             }
         }
 
-        // Fallback mínimo
+        StringBuilder mensagem = new StringBuilder();
+        mensagem.append(tituloBase);
+        if (descricao != null && !descricao.isEmpty()) {
+            mensagem.append("\n").append(descricao);
+        }
+
         JOptionPane.showMessageDialog(
             janelaAtual,
-            "Carta de Sorte/Revés não encontrada: " + titulo,
-            "Carta não encontrada",
+            mensagem.toString(),
+            "Carta de Sorte/Revés",
             JOptionPane.INFORMATION_MESSAGE
         );
     }
 
-    public void exibirCartaSorteReves(banco_imobiliario_models.SorteRevesCard carta) {
+    public void exibirCartaSorteReves(banco_imobiliario_models.GameModel.SorteRevesCard carta) {
         if (carta == null) return;
-        exibirCartaSorteRevesPorNumero(carta.getId());
+        exibirCartaSorteRevesPorNumero(carta.getNumero());
     }
 
     private java.util.Optional<ImageIcon> localizarIconeSorteReves(int numero) {

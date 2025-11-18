@@ -65,9 +65,12 @@ public final class BancoDeCartasDialog extends JDialog {
     }
 
     private void visualizar(banco_imobiliario_models.GameModel.BancoDeCartasItem it) {
-        // Abre a carta em modo "somente visualização" (sem barra de ações)
-    	controller.exibirCartaTerritorioSomenteVisualizacao(it.getNome());
-
+        if (it.getTipo() == banco_imobiliario_models.GameModel.BancoDeCartasItem.Tipo.SORTE_REVES
+                && it.getNumeroSorteReves() != null) {
+            controller.exibirCartaSorteRevesPorNumero(it.getNumeroSorteReves());
+        } else {
+            controller.exibirCartaTerritorioSomenteVisualizacao(it.getNome());
+        }
     }
 
 }

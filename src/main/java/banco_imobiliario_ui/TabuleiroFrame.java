@@ -35,6 +35,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private final javax.swing.JButton btnEncerrarVez     = new javax.swing.JButton("Encerrar vez");
     private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar");
     private final javax.swing.JButton btnBancoCartas     = new javax.swing.JButton("Abrir banco de cartas");
+    private final javax.swing.JButton btnUsarCartaPrisao = new javax.swing.JButton("Usar carta de prisão");
 
     // Nome da casa atual (território) para o popup
     private String nomeCasaParaExibir = null;
@@ -76,6 +77,10 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         // Botão "Abrir banco de cartas" — visível ao lado dos demais
         btnBancoCartas.setEnabled(false);
         btnBancoCartas.addActionListener(e -> abrirBancoDeCartas());
+
+        btnUsarCartaPrisao.setEnabled(false);
+        btnUsarCartaPrisao.setToolTipText("Use a carta de saída livre da prisão quando estiver preso.");
+        btnUsarCartaPrisao.addActionListener(e -> usarCartaSaidaLivre());
 
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
@@ -139,6 +144,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.Y_AXIS));
         actions.add(btnJogar);
         actions.add(javax.swing.Box.createVerticalStrut(6));
+        actions.add(btnUsarCartaPrisao);
+        actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnEncerrarVez);
         actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnBancoCartas);        // <-- botão inserido
@@ -183,6 +190,18 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         } catch (RuntimeException ex) {
             controller.exibirErro(ex.getMessage());
             // Em caso de erro, não reabilitamos aqui; o update() ajusta conforme o estado real.
+        }
+    }
+
+    private void usarCartaSaidaLivre() {
+        banco_imobiliario_models.GameModel model = controller.getModel();
+        try {
+            boolean ok = model.usarCartaSaidaLivre();
+            if (!ok) {
+                controller.exibirErro("Não é possível usar a carta agora.");
+            }
+        } catch (RuntimeException ex) {
+            controller.exibirErro(ex.getMessage());
         }
     }
 
@@ -317,9 +336,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 pos = ((pos % 40) + 40) % 40;
 
                 java.awt.geom.Point2D.Double base = centers.get(pos);
-                java.awt.Point offset = pawnOffsetForIndex(i, (int) cell);
-                int cx = (int) Math.round(base.x) + offset.x;
-                int cy = (int) Math.round(base.y) + offset.y;
+                int cx = (int) Math.round(base.x);
+                int cy = (int) Math.round(base.y);
 
                 int idx = p.getPawnIndex();
                 java.awt.image.BufferedImage pin = (idx >= 0 && idx < pinImgs.length) ? pinImgs[idx] : null;
@@ -373,19 +391,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             return dr*dr + dg*dg + db*db;
         }
 
-        private java.awt.Point pawnOffsetForIndex(int idx, int cellPx) {
-            int d = java.lang.Math.max(6, (int)java.lang.Math.round(cellPx * 0.18));
-            switch (idx) {
-                case 0:  return new java.awt.Point(0, 0);
-                case 1:  return new java.awt.Point(-d, -d);
-                case 2:  return new java.awt.Point(+d, -d);
-                case 3:  return new java.awt.Point(-d, +d);
-                case 4:  return new java.awt.Point(+d, +d);
-                case 5:  return new java.awt.Point(0, -2*d);
-                default: return new java.awt.Point(0, 0);
-            }
-        }
-
         private java.util.List<java.awt.geom.Point2D.Double> buildCellCenters() {
             java.util.List<java.awt.geom.Point2D.Double> list = new java.util.ArrayList<>(40);
             double cell = side / 11.0;
@@ -412,13 +417,11 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private static final class DicePanel extends javax.swing.JPanel {
         private static final long serialVersionUID = 1L;
 
-        private final banco_imobiliario_controller.AppController controller;
         private java.awt.Color playerColor = new java.awt.Color(200,200,200);
         private int d1 = 1, d2 = 1; // último resultado exibido
         private final java.awt.Image[] diceImgs = new java.awt.Image[7]; // 1..6
 
         DicePanel(banco_imobiliario_controller.AppController controller) {
-            this.controller = controller;
             setPreferredSize(new java.awt.Dimension(236, 160));
             setOpaque(false);
             loadDiceImages();
@@ -532,7 +535,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         private int saldoBanco = 0;
 
         private final java.text.NumberFormat brl =
-            java.text.NumberFormat.getCurrencyInstance(new java.util.Locale("pt","BR"));
+            java.text.NumberFormat.getCurrencyInstance(java.util.Locale.forLanguageTag("pt-BR"));
 
         MoneyPanel(banco_imobiliario_controller.AppController controller) {
             this.controller = controller;
@@ -729,6 +732,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 saiuDupla = m.houveDuplaNoUltimoLancamento();
             } catch (Throwable ignore) {}
             btnEncerrarVez.setEnabled(!saiuDupla);
+
+            boolean podeUsarCartaPrisao = false;
+            try {
+                podeUsarCartaPrisao = m.isJogadorDaVezNaPrisao() && m.jogadorDaVezTemCartaSaidaLivre();
+            } catch (Throwable ignore) {}
+            btnUsarCartaPrisao.setEnabled(podeUsarCartaPrisao);
 
             // Popup de Sorte/Revés (one-shot)
             try {

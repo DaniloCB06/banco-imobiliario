@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
+import java.util.Collections;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Map;
@@ -64,19 +64,22 @@ public class GameModel {
     public static final class SorteRevesCard {
         private final int numero;
         private final String rotulo;       // ex.: "Sorte/Revés #05"
+        private final String titulo;
+        private final String descricao;
         private final String imagemArquivo; // opcional (pode ser null)
-        public SorteRevesCard(int n) {
-            this.numero = n;
-            this.rotulo = String.format(Locale.ROOT, "Sorte/Revés #%02d", n);
+        public SorteRevesCard(int numero, String titulo, String descricao) {
+            this.numero = numero;
+            this.rotulo = String.format(Locale.ROOT, "Sorte/Revés #%02d", numero);
+            this.titulo = titulo == null ? this.rotulo : titulo;
+            this.descricao = descricao == null ? "" : descricao;
             this.imagemArquivo = null;
         }
         public int getNumero() { return numero; }
         public String getRotulo() { return rotulo; }
+        public String getTitulo() { return titulo; }
+        public String getDescricao() { return descricao; }
         public String getImagemArquivo() { return imagemArquivo; }
     }
-
-    /** RNG para baralho. */
-    private Random rngSorteReves;
 
     /** Tamanho do baralho e posição do próximo sorteio (circular). */
     private int tamanhoBaralhoSR = 30;
@@ -91,7 +94,10 @@ public class GameModel {
 
     /** Configura um baralho padrão com N cartas genéricas numeradas 1..N. */
     public void configurarBaralhoSorteRevesPadrao(int totalCartas) {
-        if (totalCartas <= 0) totalCartas = 20;
+        int limite = SorteRevesCards.total();
+        if (totalCartas <= 0 || totalCartas > limite) {
+            totalCartas = limite;
+        }
         this.tamanhoBaralhoSR = totalCartas;
         this.ponteiroBaralhoSR = 0;
     }
@@ -101,9 +107,22 @@ public class GameModel {
         return ultimaCartaSR;
     }
 
+    /** Recupera metadados da carta informada (sempre via GameModel). */
+    public Optional<SorteRevesCard> getCartaSorteRevesPorNumero(int numero) {
+        if (numero < 1 || numero > SorteRevesCards.total()) {
+            return Optional.empty();
+        }
+        SorteRevesCards.Definition def = SorteRevesCards.get(numero);
+        if (def == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SorteRevesCard(numero, def.getTitulo(), def.getDescricao()));
+    }
+
     /** Banco de cartas do jogador (IDs das cartas em posse). */
     public Set<Integer> getCartasSorteRevesDoJogador(int jogadorId) {
-        return cartasSRPorJogador.getOrDefault(jogadorId, new HashSet<>());
+        Set<Integer> cartas = cartasSRPorJogador.get(jogadorId);
+        return cartas == null ? Collections.emptySet() : Collections.unmodifiableSet(cartas);
     }
 
     /** Consumido pela UI para mostrar a imagem/rotulo 1x só após o sorteio. */
@@ -115,14 +134,140 @@ public class GameModel {
 
     /** Sorteia e entrega uma carta simples ao jogador. */
     private SorteRevesCard sortearCartaParaJogador(int jogadorId) {
-        if (tamanhoBaralhoSR <= 0) tamanhoBaralhoSR = 20;
+        if (tamanhoBaralhoSR <= 0) {
+            tamanhoBaralhoSR = SorteRevesCards.total();
+        }
         int numero = (ponteiroBaralhoSR % tamanhoBaralhoSR) + 1;
         ponteiroBaralhoSR++;
-        SorteRevesCard card = new SorteRevesCard(numero);
+
+        SorteRevesCards.Definition def = SorteRevesCards.get(numero);
+        String titulo = def != null ? def.getTitulo() : String.format(Locale.ROOT, "Sorte/Revés #%02d", numero);
+        String descricao = def != null ? def.getDescricao() : "";
+
+        SorteRevesCard card = new SorteRevesCard(numero, titulo, descricao);
         cartasSRPorJogador.computeIfAbsent(jogadorId, k -> new HashSet<>()).add(numero);
         ultimaCartaSR = Optional.of(card);
         srRecemSacada = Optional.of(card);
+        aplicarEfeitoCartaSorteReves(jogadorId, numero, def);
         return card;
+    }
+
+    private void aplicarEfeitoCartaSorteReves(int jogadorId, int numero, SorteRevesCards.Definition def) {
+        if (def == null) {
+            return;
+        }
+        Jogador jogador = jogadores.get(jogadorId);
+        if (jogador == null) {
+            return;
+        }
+
+        boolean manterCarta = def.getEffectType() == SorteRevesCards.EffectType.SAIDA_LIVRE_DA_PRISAO;
+
+        switch (def.getEffectType()) {
+            case RECEBER_DO_BANCO:
+                if (def.getValor() > 0) {
+                    banco.debitar(def.getValor());
+                    jogador.creditar(def.getValor());
+                }
+                break;
+            case PAGAR_AO_BANCO:
+                processarPagamentoAoBanco(jogador, def.getValor());
+                break;
+            case RECEBER_DE_CADA_JOGADOR:
+                processarReceberDeCadaJogador(jogadorId, def.getValor());
+                break;
+            case SAIDA_LIVRE_DA_PRISAO:
+                jogador.setCartaSaidaLivre(true);
+                break;
+            case IR_PARA_PRISAO:
+                enviarParaPrisao(jogadorId);
+                break;
+            default:
+                break;
+        }
+
+        if (!manterCarta) {
+            removerCartaSorteRevesDoJogador(jogadorId, numero);
+        }
+    }
+
+    private void processarPagamentoAoBanco(Jogador jogador, int valor) {
+        if (jogador == null || valor <= 0) {
+            return;
+        }
+
+        if (jogador.getSaldo() < valor) {
+            tentarLevantarFundosPara(jogador, valor);
+        }
+
+        if (jogador.getSaldo() >= valor) {
+            jogador.debitar(valor);
+            banco.creditar(valor);
+            return;
+        }
+
+        int disponivel = Math.max(0, jogador.getSaldo());
+        if (disponivel > 0) {
+            jogador.debitar(disponivel);
+            banco.creditar(disponivel);
+        }
+        executarFalencia(jogador);
+    }
+
+    private void processarReceberDeCadaJogador(int favorecidoId, int valor) {
+        if (valor <= 0) {
+            return;
+        }
+        Jogador favorecido = jogadores.get(favorecidoId);
+        if (favorecido == null) {
+            return;
+        }
+
+        for (int i = 0; i < jogadores.size(); i++) {
+            if (i == favorecidoId) {
+                continue;
+            }
+            Jogador pagador = jogadores.get(i);
+            if (pagador == null || !pagador.isAtivo()) {
+                continue;
+            }
+            transferirEntreJogadores(pagador, favorecido, valor);
+        }
+    }
+
+    private int transferirEntreJogadores(Jogador pagador, Jogador recebedor, int valor) {
+        if (pagador == null || recebedor == null || valor <= 0) {
+            return 0;
+        }
+
+        if (pagador.getSaldo() < valor) {
+            tentarLevantarFundosPara(pagador, valor);
+        }
+
+        if (pagador.getSaldo() >= valor) {
+            pagador.debitar(valor);
+            recebedor.creditar(valor);
+            return valor;
+        }
+
+        int disponivel = Math.max(0, pagador.getSaldo());
+        if (disponivel > 0) {
+            pagador.debitar(disponivel);
+            recebedor.creditar(disponivel);
+        }
+        executarFalencia(pagador);
+        return disponivel;
+    }
+
+    private void removerCartaSorteRevesDoJogador(int jogadorId, int numero) {
+        Set<Integer> cartas = cartasSRPorJogador.get(jogadorId);
+        if (cartas == null) {
+            return;
+        }
+        cartas.remove(numero);
+        if (cartas.isEmpty()) {
+            cartasSRPorJogador.remove(jogadorId);
+        }
     }
 
     /** Heurística para identificar casa do tipo Sorte/Revés (ajuste se necessário). */
@@ -169,8 +314,6 @@ public class GameModel {
             cartasSRPorJogador.put(i, new HashSet<>());
         }
 
-        long seedSR = (seedOpcional != null) ? seedOpcional + 13L : System.nanoTime();
-        this.rngSorteReves = new Random(seedSR);
         this.configurarBaralhoSorteRevesPadrao(30);
 
         this.ultimoD1 = this.ultimoD2 = null;
@@ -595,6 +738,7 @@ public class GameModel {
 
         if (j.temCartaSaidaLivre()) {
             j.setCartaSaidaLivre(false);
+            removerCartaSorteRevesDoJogador(j.getId(), 9);
             j.setNaPrisao(false);
             turno.resetarDuplas();
             return true;
@@ -609,13 +753,19 @@ public class GameModel {
 
     public boolean usarCartaSaidaLivre() {
         exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
         final Jogador j = jogadores.get(getJogadorDaVez());
         if (!j.isNaPrisao() || !j.temCartaSaidaLivre())
             return false;
 
         j.setCartaSaidaLivre(false);
+        removerCartaSorteRevesDoJogador(j.getId(), 9);
         j.setNaPrisao(false);
         turno.resetarDuplas();
+        this.jaLancouNesteTurno = false;
+        this.ultimoD1 = null;
+        this.ultimoD2 = null;
+        notifyObservers();
         return true;
     }
 
@@ -740,6 +890,11 @@ public class GameModel {
     public boolean isJogadorDaVezNaPrisao() {
         exigirPartidaIniciada();
         return jogadores.get(getJogadorDaVez()).isNaPrisao();
+    }
+
+    public boolean jogadorDaVezTemCartaSaidaLivre() {
+        exigirPartidaIniciada();
+        return jogadores.get(getJogadorDaVez()).temCartaSaidaLivre();
     }
 
     /** Atalho direto para habilitar o botão "Exibir/Abrir banco de cartas" na UI. */
@@ -948,6 +1103,18 @@ public class GameModel {
         notifyObservers();
     }
 
+    public void debugForcarProximaCartaSorteReves(int numero) {
+        if (numero < 1)
+            throw new IllegalArgumentException("numero deve ser >= 1");
+        if (tamanhoBaralhoSR <= 0) {
+            tamanhoBaralhoSR = SorteRevesCards.total();
+        }
+        if (numero > tamanhoBaralhoSR) {
+            throw new IllegalArgumentException("numero fora do baralho configurado");
+        }
+        this.ponteiroBaralhoSR = numero - 1;
+    }
+
     public void debugForcarPosicaoJogador(int idJogador, int posicao) {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -1090,6 +1257,7 @@ public class GameModel {
             p.resetarParaBanco();
         }
         j.falir();
+        cartasSRPorJogador.remove(j.getId());
     }
 
     public void definirOrdemJogadores(List<Integer> ordem) {
