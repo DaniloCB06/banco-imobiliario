@@ -56,4 +56,43 @@ final class Turno {
     void passarVez() {
         idxVez = (idxVez + 1) % ordem.size();
     }
+
+    List<Integer> snapshotOrdem() {
+        return new ArrayList<>(ordem);
+    }
+
+    int snapshotIdxVez() {
+        return idxVez;
+    }
+
+    int snapshotDuplasConsecutivas() {
+        return duplasConsecutivas;
+    }
+
+    int snapshotUltimoD1() {
+        return ultimoD1;
+    }
+
+    int snapshotUltimoD2() {
+        return ultimoD2;
+    }
+
+    void restaurarEstado(List<Integer> novaOrdem,
+                         int novoIdxVez,
+                         int novasDuplas,
+                         int novoUltimoD1,
+                         int novoUltimoD2) {
+        if (novaOrdem == null || novaOrdem.isEmpty()) {
+            throw new IllegalArgumentException("Ordem inválida para restauração.");
+        }
+        ordem.clear();
+        ordem.addAll(novaOrdem);
+        if (novoIdxVez < 0 || novoIdxVez >= ordem.size()) {
+            throw new IllegalArgumentException("Índice da vez fora do intervalo.");
+        }
+        this.idxVez = novoIdxVez;
+        this.duplasConsecutivas = Math.max(0, novasDuplas);
+        this.ultimoD1 = novoUltimoD1;
+        this.ultimoD2 = novoUltimoD2;
+    }
 }

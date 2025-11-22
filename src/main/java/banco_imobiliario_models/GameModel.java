@@ -31,6 +31,9 @@ public class GameModel {
     private Banco banco;
     private final List<Jogador> jogadores = new ArrayList<>();
     private Tabuleiro tabuleiro;
+    private boolean salvamentoDisponivel = true;
+    private boolean partidaEncerrada = false;
+    private ResultadoPartida resultadoPartida = null;
 
     // Lançamento corrente
     private Integer ultimoD1 = null, ultimoD2 = null;
@@ -305,6 +308,9 @@ public class GameModel {
         this.rng = new RandomProvider(seedOpcional);
         this.turno = new Turno(numJogadores);
         this.banco = new Banco(200_000);
+        this.partidaEncerrada = false;
+        this.resultadoPartida = null;
+        this.salvamentoDisponivel = true;
 
         this.jogadores.clear();
         cartasSRPorJogador.clear();
@@ -322,6 +328,7 @@ public class GameModel {
         this.ultimaCartaSR = Optional.empty();
         this.srRecemSacada = Optional.empty();
         limparContextoDeQueda();
+        liberarSalvamentoNoInicioDaVez();
         notifyObservers();
     }
 
@@ -356,6 +363,18 @@ public class GameModel {
         this.acabouDeComprarNestaQueda = false;
     }
 
+    private void bloquearSalvamentoDuranteTurno() {
+        if (!partidaEncerrada) {
+            salvamentoDisponivel = false;
+        }
+    }
+
+    private void liberarSalvamentoNoInicioDaVez() {
+        if (!partidaEncerrada) {
+            salvamentoDisponivel = true;
+        }
+    }
+
     // =====================================================================================
     // REGRA #1 — LANÇAR DADOS (apenas 1x por turno; libera se DUPLA válida)
     // =====================================================================================
@@ -365,6 +384,7 @@ public class GameModel {
         if (jaLancouNesteTurno) {
             throw new IllegalStateException("Neste turno você já rolou os dados.");
         }
+        bloquearSalvamentoDuranteTurno();
         int d1 = dado1.rolar(rng);
         int d2 = dado2.rolar(rng);
         turno.registrarLance(d1, d2);
@@ -388,6 +408,7 @@ public class GameModel {
         if (d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
             throw new IllegalArgumentException("Valores dos dados devem estar entre 1 e 6.");
         }
+        bloquearSalvamentoDuranteTurno();
         turno.registrarLance(d1, d2);
         this.ultimoD1 = d1;
         this.ultimoD2 = d2;
@@ -427,6 +448,7 @@ public class GameModel {
         this.jaLancouNesteTurno = false;
         this.ultimoD1 = null;
         this.ultimoD2 = null;
+        liberarSalvamentoNoInicioDaVez();
         notifyObservers();
     }
 
@@ -828,10 +850,7 @@ public class GameModel {
         }
 
         if (j.getSaldo() < 0) {
-            j.falir();
-            for (Propriedade p : listarPropriedadesDo(j)) {
-                p.resetarParaBanco();
-            }
+            executarFalencia(j);
             notifyObservers();
             return true;
         }
@@ -874,6 +893,26 @@ public class GameModel {
 
     public int getSaldoBanco() {
         return banco.getSaldo();
+    }
+
+    public boolean temPartidaConfigurada() {
+        return rng != null && turno != null && !jogadores.isEmpty();
+    }
+
+    public boolean temPartidaAtiva() {
+        return temPartidaConfigurada() && !partidaEncerrada;
+    }
+
+    public boolean isSalvamentoDisponivel() {
+        return temPartidaAtiva() && salvamentoDisponivel;
+    }
+
+    public boolean isPartidaEncerrada() {
+        return partidaEncerrada;
+    }
+
+    public Optional<ResultadoPartida> getResultadoPartida() {
+        return Optional.ofNullable(resultadoPartida);
     }
 
     public boolean isJogadorAtivo(int idJogador) {
@@ -1165,6 +1204,398 @@ public class GameModel {
     }
 
     // =====================================================================================
+    // TÉRMINO DA PARTIDA
+    // =====================================================================================
+
+    public static enum FimPartidaMotivo {
+        JANELA_FECHADA,
+        BOTAO_ENCERRAR,
+        ULTIMO_JOGADOR_RESTANTE
+    }
+
+    public static final class ResumoCapital {
+        private final int jogadorId;
+        private final int saldoDisponivel;
+        private final int patrimonio;
+        private final int capitalTotal;
+        private final boolean ativo;
+
+        ResumoCapital(int jogadorId, int saldoDisponivel, int patrimonio, boolean ativo) {
+            this.jogadorId = jogadorId;
+            this.saldoDisponivel = saldoDisponivel;
+            this.patrimonio = patrimonio;
+            this.capitalTotal = saldoDisponivel + patrimonio;
+            this.ativo = ativo;
+        }
+
+        public int getJogadorId() { return jogadorId; }
+        public int getSaldoDisponivel() { return saldoDisponivel; }
+        public int getPatrimonio() { return patrimonio; }
+        public int getCapitalTotal() { return capitalTotal; }
+        public boolean isAtivo() { return ativo; }
+    }
+
+    public static final class ResultadoPartida {
+        private final FimPartidaMotivo motivo;
+        private final List<ResumoCapital> ranking;
+        private final int vencedorId;
+
+        ResultadoPartida(FimPartidaMotivo motivo, List<ResumoCapital> ranking) {
+            this.motivo = motivo;
+            this.ranking = Collections.unmodifiableList(new ArrayList<>(ranking));
+            this.vencedorId = ranking.isEmpty() ? -1 : ranking.get(0).getJogadorId();
+        }
+
+        public FimPartidaMotivo getMotivo() { return motivo; }
+        public List<ResumoCapital> getRanking() { return ranking; }
+        public int getVencedorId() { return vencedorId; }
+    }
+
+    public void encerrarPartida(FimPartidaMotivo motivo) {
+        if (!temPartidaConfigurada() || partidaEncerrada) {
+            return;
+        }
+        FimPartidaMotivo efetivo = (motivo == null) ? FimPartidaMotivo.BOTAO_ENCERRAR : motivo;
+        List<ResumoCapital> ranking = calcularResumoCapital();
+        this.resultadoPartida = new ResultadoPartida(efetivo, ranking);
+        this.partidaEncerrada = true;
+        this.salvamentoDisponivel = false;
+        notifyObservers();
+    }
+
+    private List<ResumoCapital> calcularResumoCapital() {
+        List<ResumoCapital> lista = new ArrayList<>();
+        for (Jogador j : jogadores) {
+            int patrimonio = 0;
+            for (Propriedade p : listarPropriedadesDo(j)) {
+                patrimonio += Math.max(0, p.valorAgregadoAtual());
+            }
+            lista.add(new ResumoCapital(j.getId(), j.getSaldo(), patrimonio, j.isAtivo()));
+        }
+        lista.sort((a, b) -> {
+            int cmp = Integer.compare(b.getCapitalTotal(), a.getCapitalTotal());
+            if (cmp != 0)
+                return cmp;
+            cmp = Integer.compare(b.getSaldoDisponivel(), a.getSaldoDisponivel());
+            if (cmp != 0)
+                return cmp;
+            return Integer.compare(a.getJogadorId(), b.getJogadorId());
+        });
+        return lista;
+    }
+
+    // =====================================================================================
+    // SALVAMENTO E RECUPERAÇÃO DE ESTADO
+    // =====================================================================================
+
+    public static final class PlayerState {
+        private final int id;
+        private final int saldo;
+        private final int posicao;
+        private final boolean ativo;
+        private final boolean naPrisao;
+        private final boolean cartaSaidaLivre;
+
+        public PlayerState(int id, int saldo, int posicao, boolean ativo, boolean naPrisao, boolean cartaSaidaLivre) {
+            this.id = id;
+            this.saldo = saldo;
+            this.posicao = posicao;
+            this.ativo = ativo;
+            this.naPrisao = naPrisao;
+            this.cartaSaidaLivre = cartaSaidaLivre;
+        }
+
+        public int getId() { return id; }
+        public int getSaldo() { return saldo; }
+        public int getPosicao() { return posicao; }
+        public boolean isAtivo() { return ativo; }
+        public boolean isNaPrisao() { return naPrisao; }
+        public boolean hasCartaSaidaLivre() { return cartaSaidaLivre; }
+    }
+
+    public static final class PropertyState {
+        private final int posicao;
+        private final int donoId;
+        private final int numCasas;
+        private final boolean hotel;
+
+        public PropertyState(int posicao, int donoId, int numCasas, boolean hotel) {
+            this.posicao = posicao;
+            this.donoId = donoId;
+            this.numCasas = numCasas;
+            this.hotel = hotel;
+        }
+
+        public int getPosicao() { return posicao; }
+        public int getDonoId() { return donoId; }
+        public int getNumCasas() { return numCasas; }
+        public boolean hasHotel() { return hotel; }
+    }
+
+    public static final class SaveState {
+        private final List<PlayerState> jogadores;
+        private final List<PropertyState> propriedades;
+        private final List<Integer> ordemTurno;
+        private final int turnoIndex;
+        private final int turnoDuplasConsecutivas;
+        private final int turnoUltimoD1;
+        private final int turnoUltimoD2;
+        private final Integer ultimoD1;
+        private final Integer ultimoD2;
+        private final boolean jaLancouNesteTurno;
+        private final boolean deveIrParaPrisaoPorTerceiraDupla;
+        private final Integer posicaoDaQuedaAtual;
+        private final boolean jaConstruiuNestaQueda;
+        private final boolean acabouDeComprarNestaQueda;
+        private final boolean salvamentoDisponivel;
+        private final int bancoSaldo;
+        private final int tamanhoBaralhoSR;
+        private final int ponteiroBaralhoSR;
+        private final Map<Integer, Set<Integer>> cartasSRPorJogador;
+        private final Integer ultimaCartaNumero;
+        private final Integer cartaBufferNumero;
+
+        public SaveState(List<PlayerState> jogadores,
+                         List<PropertyState> propriedades,
+                         List<Integer> ordemTurno,
+                         int turnoIndex,
+                         int turnoDuplasConsecutivas,
+                         int turnoUltimoD1,
+                         int turnoUltimoD2,
+                         Integer ultimoD1,
+                         Integer ultimoD2,
+                         boolean jaLancouNesteTurno,
+                         boolean deveIrParaPrisaoPorTerceiraDupla,
+                         Integer posicaoDaQuedaAtual,
+                         boolean jaConstruiuNestaQueda,
+                         boolean acabouDeComprarNestaQueda,
+                         boolean salvamentoDisponivel,
+                         int bancoSaldo,
+                         int tamanhoBaralhoSR,
+                         int ponteiroBaralhoSR,
+                         Map<Integer, Set<Integer>> cartasSRPorJogador,
+                         Integer ultimaCartaNumero,
+                         Integer cartaBufferNumero) {
+            this.jogadores = Collections.unmodifiableList(new ArrayList<>(jogadores));
+            this.propriedades = Collections.unmodifiableList(new ArrayList<>(propriedades));
+            this.ordemTurno = Collections.unmodifiableList(new ArrayList<>(ordemTurno));
+            this.turnoIndex = turnoIndex;
+            this.turnoDuplasConsecutivas = turnoDuplasConsecutivas;
+            this.turnoUltimoD1 = turnoUltimoD1;
+            this.turnoUltimoD2 = turnoUltimoD2;
+            this.ultimoD1 = ultimoD1;
+            this.ultimoD2 = ultimoD2;
+            this.jaLancouNesteTurno = jaLancouNesteTurno;
+            this.deveIrParaPrisaoPorTerceiraDupla = deveIrParaPrisaoPorTerceiraDupla;
+            this.posicaoDaQuedaAtual = posicaoDaQuedaAtual;
+            this.jaConstruiuNestaQueda = jaConstruiuNestaQueda;
+            this.acabouDeComprarNestaQueda = acabouDeComprarNestaQueda;
+            this.salvamentoDisponivel = salvamentoDisponivel;
+            this.bancoSaldo = bancoSaldo;
+            this.tamanhoBaralhoSR = tamanhoBaralhoSR;
+            this.ponteiroBaralhoSR = ponteiroBaralhoSR;
+            Map<Integer, Set<Integer>> mapa = new HashMap<>();
+            for (Map.Entry<Integer, Set<Integer>> e : cartasSRPorJogador.entrySet()) {
+                mapa.put(e.getKey(), Collections.unmodifiableSet(new HashSet<>(e.getValue())));
+            }
+            this.cartasSRPorJogador = Collections.unmodifiableMap(mapa);
+            this.ultimaCartaNumero = ultimaCartaNumero;
+            this.cartaBufferNumero = cartaBufferNumero;
+        }
+
+        public List<PlayerState> getJogadores() { return jogadores; }
+        public List<PropertyState> getPropriedades() { return propriedades; }
+        public List<Integer> getOrdemTurno() { return ordemTurno; }
+        public int getTurnoIndex() { return turnoIndex; }
+        public int getTurnoDuplasConsecutivas() { return turnoDuplasConsecutivas; }
+        public int getTurnoUltimoD1() { return turnoUltimoD1; }
+        public int getTurnoUltimoD2() { return turnoUltimoD2; }
+        public Integer getUltimoD1() { return ultimoD1; }
+        public Integer getUltimoD2() { return ultimoD2; }
+        public boolean isJaLancouNesteTurno() { return jaLancouNesteTurno; }
+        public boolean isDeveIrParaPrisaoPorTerceiraDupla() { return deveIrParaPrisaoPorTerceiraDupla; }
+        public Integer getPosicaoDaQuedaAtual() { return posicaoDaQuedaAtual; }
+        public boolean isJaConstruiuNestaQueda() { return jaConstruiuNestaQueda; }
+        public boolean isAcabouDeComprarNestaQueda() { return acabouDeComprarNestaQueda; }
+        public boolean isSalvamentoDisponivel() { return salvamentoDisponivel; }
+        public int getBancoSaldo() { return bancoSaldo; }
+        public int getTamanhoBaralhoSR() { return tamanhoBaralhoSR; }
+        public int getPonteiroBaralhoSR() { return ponteiroBaralhoSR; }
+        public Map<Integer, Set<Integer>> getCartasSRPorJogador() { return cartasSRPorJogador; }
+        public Integer getUltimaCartaNumero() { return ultimaCartaNumero; }
+        public Integer getCartaBufferNumero() { return cartaBufferNumero; }
+    }
+
+    public SaveState exportarEstado() {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        List<PlayerState> players = new ArrayList<>();
+        for (Jogador j : jogadores) {
+            players.add(new PlayerState(j.getId(), j.getSaldo(), j.getPosicao(), j.isAtivo(), j.isNaPrisao(), j.temCartaSaidaLivre()));
+        }
+
+        List<PropertyState> props = new ArrayList<>();
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (c instanceof Propriedade) {
+                Propriedade p = (Propriedade) c;
+                int donoId = p.temDono() ? p.getDono().getId() : -1;
+                props.add(new PropertyState(p.getPosicao(), donoId, p.getNumCasas(), p.temHotel()));
+            }
+        }
+
+        Map<Integer, Set<Integer>> cartas = new HashMap<>();
+        for (Map.Entry<Integer, Set<Integer>> e : cartasSRPorJogador.entrySet()) {
+            cartas.put(e.getKey(), new HashSet<>(e.getValue()));
+        }
+
+        Integer ultimaCartaNumero = ultimaCartaSR.map(SorteRevesCard::getNumero).orElse(null);
+        Integer bufferCartaNumero = srRecemSacada.map(SorteRevesCard::getNumero).orElse(null);
+
+        return new SaveState(
+                players,
+                props,
+                turno.snapshotOrdem(),
+                turno.snapshotIdxVez(),
+                turno.snapshotDuplasConsecutivas(),
+                turno.snapshotUltimoD1(),
+                turno.snapshotUltimoD2(),
+                ultimoD1,
+                ultimoD2,
+                jaLancouNesteTurno,
+                deveIrParaPrisaoPorTerceiraDupla,
+                posicaoDaQuedaAtual,
+                jaConstruiuNestaQueda,
+                acabouDeComprarNestaQueda,
+                salvamentoDisponivel,
+                banco.getSaldo(),
+                tamanhoBaralhoSR,
+                ponteiroBaralhoSR,
+                cartas,
+                ultimaCartaNumero,
+                bufferCartaNumero
+        );
+    }
+
+    public void importarEstado(SaveState state) {
+        if (state == null || state.getJogadores().isEmpty()) {
+            throw new IllegalArgumentException("Estado inválido para importação.");
+        }
+
+        int qtdJogadores = state.getJogadores().size();
+        this.jogadores.clear();
+        for (int i = 0; i < qtdJogadores; i++) {
+            this.jogadores.add(null);
+        }
+        for (PlayerState ps : state.getJogadores()) {
+            if (ps.getId() < 0 || ps.getId() >= qtdJogadores) {
+                throw new IllegalArgumentException("ID de jogador fora do intervalo no estado salvo.");
+            }
+            Jogador novo = new Jogador(ps.getId(), ps.getSaldo());
+            novo.moverPara(ps.getPosicao());
+            novo.setNaPrisao(ps.isNaPrisao());
+            novo.setCartaSaidaLivre(ps.hasCartaSaidaLivre());
+            if (!ps.isAtivo()) {
+                novo.falir();
+            }
+            this.jogadores.set(ps.getId(), novo);
+        }
+        for (int i = 0; i < this.jogadores.size(); i++) {
+            if (this.jogadores.get(i) == null) {
+                throw new IllegalArgumentException("Estado salvo não possui dados para o jogador " + i);
+            }
+        }
+
+        this.rng = new RandomProvider(null);
+
+        if (state.getOrdemTurno().size() != qtdJogadores) {
+            throw new IllegalArgumentException("Ordem dos jogadores inválida no estado salvo.");
+        }
+        this.turno = new Turno(qtdJogadores);
+        this.turno.restaurarEstado(state.getOrdemTurno(), state.getTurnoIndex(), state.getTurnoDuplasConsecutivas(),
+                                   state.getTurnoUltimoD1(), state.getTurnoUltimoD2());
+
+        this.banco = new Banco(state.getBancoSaldo());
+
+        if (this.tabuleiro == null) {
+            this.tabuleiro = TabuleiroOficialFactory.criar();
+        }
+        for (int i = 0; i < tabuleiro.tamanho(); i++) {
+            Casa c = tabuleiro.getCasa(i);
+            if (c instanceof Propriedade) {
+                ((Propriedade) c).resetarParaBanco();
+            }
+        }
+        for (PropertyState ps : state.getPropriedades()) {
+            Casa c = tabuleiro.getCasa(ps.getPosicao());
+            if (!(c instanceof Propriedade)) {
+                continue;
+            }
+            Propriedade prop = (Propriedade) c;
+            if (ps.getDonoId() >= 0 && ps.getDonoId() < jogadores.size()) {
+                prop.setDono(jogadores.get(ps.getDonoId()));
+                for (int i = 0; i < ps.getNumCasas(); i++) {
+                    if (!prop.podeConstruirCasa()) {
+                        break;
+                    }
+                    prop.construirCasa();
+                }
+                if (ps.hasHotel() && prop.podeConstruirHotel()) {
+                    prop.construirHotel();
+                }
+            } else {
+                prop.setDono(null);
+            }
+        }
+
+        this.cartasSRPorJogador.clear();
+        for (int i = 0; i < qtdJogadores; i++) {
+            this.cartasSRPorJogador.put(i, new HashSet<>());
+        }
+        for (Map.Entry<Integer, Set<Integer>> entry : state.getCartasSRPorJogador().entrySet()) {
+            int id = entry.getKey();
+            if (!cartasSRPorJogador.containsKey(id)) {
+                cartasSRPorJogador.put(id, new HashSet<>());
+            }
+            cartasSRPorJogador.get(id).addAll(entry.getValue());
+        }
+
+        this.tamanhoBaralhoSR = state.getTamanhoBaralhoSR() <= 0 ? SorteRevesCards.total() : state.getTamanhoBaralhoSR();
+        int modulo = Math.max(1, this.tamanhoBaralhoSR);
+        int ponteiro = state.getPonteiroBaralhoSR();
+        if (ponteiro < 0) {
+            ponteiro = 0;
+        }
+        this.ponteiroBaralhoSR = ponteiro % modulo;
+
+        this.ultimoD1 = state.getUltimoD1();
+        this.ultimoD2 = state.getUltimoD2();
+        this.jaLancouNesteTurno = state.isJaLancouNesteTurno();
+        this.deveIrParaPrisaoPorTerceiraDupla = state.isDeveIrParaPrisaoPorTerceiraDupla();
+        this.posicaoDaQuedaAtual = state.getPosicaoDaQuedaAtual();
+        this.jaConstruiuNestaQueda = state.isJaConstruiuNestaQueda();
+        this.acabouDeComprarNestaQueda = state.isAcabouDeComprarNestaQueda();
+        this.salvamentoDisponivel = state.isSalvamentoDisponivel();
+
+        if (state.getUltimaCartaNumero() != null) {
+            this.ultimaCartaSR = getCartaSorteRevesPorNumero(state.getUltimaCartaNumero());
+        } else {
+            this.ultimaCartaSR = Optional.empty();
+        }
+
+        if (state.getCartaBufferNumero() != null) {
+            this.srRecemSacada = getCartaSorteRevesPorNumero(state.getCartaBufferNumero());
+        } else {
+            this.srRecemSacada = Optional.empty();
+        }
+
+        this.partidaEncerrada = false;
+        this.resultadoPartida = null;
+        notifyObservers();
+    }
+
+    // =====================================================================================
     // SUPORTES INTERNOS
     // =====================================================================================
 
@@ -1258,6 +1689,24 @@ public class GameModel {
         }
         j.falir();
         cartasSRPorJogador.remove(j.getId());
+        verificarEncerramentoPorUltimoJogador();
+    }
+
+    private void verificarEncerramentoPorUltimoJogador() {
+        if (partidaEncerrada || jogadores.isEmpty()) {
+            return;
+        }
+        int ativos = 0;
+        int ultimoAtivoId = -1;
+        for (Jogador jog : jogadores) {
+            if (jog.isAtivo()) {
+                ativos++;
+                ultimoAtivoId = jog.getId();
+            }
+        }
+        if (ativos == 1 && ultimoAtivoId >= 0) {
+            encerrarPartida(FimPartidaMotivo.ULTIMO_JOGADOR_RESTANTE);
+        }
     }
 
     public void definirOrdemJogadores(List<Integer> ordem) {

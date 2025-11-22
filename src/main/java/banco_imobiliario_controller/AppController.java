@@ -3,6 +3,8 @@ package banco_imobiliario_controller;
 // ============================================================================
 // Imports
 // ============================================================================
+import java.awt.Component;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -17,18 +19,21 @@ import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
 import java.text.Normalizer;
+import java.util.Locale;
 
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.ImageIcon;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import banco_imobiliario_models.GameModel;
 import banco_imobiliario_ui.DefinicaoJogadoresDialog;
 import banco_imobiliario_ui.JanelaInicialFrame;
 import banco_imobiliario_ui.TabuleiroFrame;
 
-public final class AppController {
+public final class AppController implements GameModel.Observer {
 
     // =========================================================================
     // [1] Singleton + Estado principal da aplicação
@@ -36,16 +41,20 @@ public final class AppController {
     private static final AppController INSTANCE = new AppController();
 
     private final GameModel model = new GameModel();
+    private final GamePersistenceService persistence = new GamePersistenceService();
     private JFrame janelaAtual;
     private List<PlayerProfile> playerProfiles = new ArrayList<>();
 
     // Ordem sorteada (ids 0..N-1 do GameModel)
     private List<Integer> ordemJogadores = new ArrayList<>();
+    private boolean resumoFinalExibido = false;
 
     // MAPEAMENTO LITERAL: nome da casa -> nome EXATO do arquivo da carta (territórios)
     private static final Map<String, String> MAPEAMENTO_CARTAS = criarMapCartas();
 
-    private AppController() {}
+    private AppController() {
+        model.addObserver(this);
+    }
     public static AppController getInstance() { return INSTANCE; }
 
     // =========================================================================
@@ -66,6 +75,7 @@ public final class AppController {
             if (nJogadores < 3 || nJogadores > 6) {
                 throw new IllegalArgumentException("Quantidade de jogadores deve estar entre 3 e 6.");
             }
+            resumoFinalExibido = false;
             model.novaPartida(nJogadores, null);
             abrirDefinicaoJogadores(nJogadores);
         } catch (RuntimeException ex) {
@@ -96,15 +106,140 @@ public final class AppController {
         garantirTabuleiroCarregado();
 
         // Abre o tabuleiro
-        fecharJanelaAtualSeExistir();
-        TabuleiroFrame frame = new TabuleiroFrame(this);
-        model.addObserver(frame);
-        janelaAtual = frame;
-        janelaAtual.setVisible(true);
-        frame.update(model);
+        abrirTabuleiroPrincipal();
 
         // Popup apenas para visualização do sorteio
         JOptionPane.showMessageDialog(janelaAtual, sr.popup, "Ordem definida", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // =========================================================================
+    // [2B] Salvamento, carregamento e término
+    // =========================================================================
+    public void solicitarSalvarPartida(Component parent) {
+        if (!model.temPartidaAtiva()) {
+            exibirErro("Não há partida em andamento para salvar.");
+            return;
+        }
+        if (!model.isSalvamentoDisponivel()) {
+            exibirErro("Só é possível salvar antes do jogador iniciar sua vez.");
+            return;
+        }
+
+        JFileChooser chooser = criarFileChooser("Salvar partida", true);
+        Component owner = parent != null ? parent : janelaAtual;
+        int escolha = chooser.showSaveDialog(owner);
+        if (escolha != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File destino = chooser.getSelectedFile();
+        if (destino == null) {
+            return;
+        }
+        if (!destino.getName().toLowerCase(Locale.ROOT).endsWith(".txt")) {
+            destino = new java.io.File(destino.getParentFile(), destino.getName() + ".txt");
+        }
+
+        try {
+            GameModel.SaveState snap = model.exportarEstado();
+            if (destino.getParentFile() != null && !destino.getParentFile().exists()) {
+                destino.getParentFile().mkdirs();
+            }
+            persistence.salvar(destino, snap, playerProfiles);
+            JOptionPane.showMessageDialog(owner,
+                    "Partida salva em:\n" + destino.getAbsolutePath(),
+                    "Salvamento",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException | RuntimeException ex) {
+            exibirErro("Falha ao salvar: " + ex.getMessage());
+        }
+    }
+
+    public void solicitarCarregarPartida(Component parent) {
+        Component owner = parent != null ? parent : janelaAtual;
+        if (model.temPartidaAtiva()) {
+            int opt = JOptionPane.showConfirmDialog(owner,
+                    "Carregar uma partida substituirá o estado atual. Continuar?",
+                    "Carregar partida",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+            if (opt != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+        JFileChooser chooser = criarFileChooser("Carregar partida", false);
+        int escolha = chooser.showOpenDialog(owner);
+        if (escolha != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File origem = chooser.getSelectedFile();
+        if (origem == null) {
+            return;
+        }
+        try {
+            GamePersistenceService.LoadedGame loaded = persistence.carregar(origem);
+            aplicarEstadoCarregado(loaded);
+            JOptionPane.showMessageDialog(owner,
+                    "Partida carregada com sucesso.",
+                    "Carregar partida",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException | RuntimeException ex) {
+            exibirErro("Falha ao carregar partida: " + ex.getMessage());
+        }
+    }
+
+    public void solicitarEncerramentoViaBotao(Component parent) {
+        if (!model.temPartidaConfigurada() || model.isPartidaEncerrada()) {
+            return;
+        }
+        Component owner = parent != null ? parent : janelaAtual;
+        int opt = JOptionPane.showConfirmDialog(owner,
+                "Deseja encerrar a partida atual?",
+                "Encerrar partida",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+        if (opt == JOptionPane.YES_OPTION) {
+            model.encerrarPartida(GameModel.FimPartidaMotivo.BOTAO_ENCERRAR);
+        }
+    }
+
+    public void solicitarEncerramentoPorFechamento(Component parent) {
+        if (!model.temPartidaConfigurada()) {
+            fecharJanelaAtualSeExistir();
+            exibirJanelaInicial();
+            return;
+        }
+        if (model.isPartidaEncerrada()) {
+            fecharJanelaAtualSeExistir();
+            exibirJanelaInicial();
+            return;
+        }
+        Component owner = parent != null ? parent : janelaAtual;
+        int opt = JOptionPane.showConfirmDialog(owner,
+                "Fechar a janela encerrará a partida. Deseja continuar?",
+                "Encerrar partida",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (opt == JOptionPane.YES_OPTION) {
+            model.encerrarPartida(GameModel.FimPartidaMotivo.JANELA_FECHADA);
+        }
+    }
+
+    private JFileChooser criarFileChooser(String titulo, boolean salvar) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(titulo);
+        chooser.setApproveButtonText(salvar ? "Salvar" : "Abrir");
+        chooser.setFileFilter(new FileNameExtensionFilter("Arquivos de texto (*.txt)", "txt"));
+        chooser.setAcceptAllFileFilterUsed(false);
+        return chooser;
+    }
+
+    private void aplicarEstadoCarregado(GamePersistenceService.LoadedGame loaded) {
+        Objects.requireNonNull(loaded, "loaded");
+        model.importarEstado(loaded.getState());
+        this.playerProfiles = new ArrayList<>(loaded.getPerfis());
+        this.ordemJogadores = new ArrayList<>(loaded.getState().getOrdemTurno());
+        this.resumoFinalExibido = false;
+        abrirTabuleiroPrincipal();
     }
 
     // =========================================================================
@@ -579,6 +714,15 @@ public final class AppController {
         );
     }
 
+    private void abrirTabuleiroPrincipal() {
+        fecharJanelaAtualSeExistir();
+        TabuleiroFrame frame = new TabuleiroFrame(this);
+        model.addObserver(frame);
+        janelaAtual = frame;
+        janelaAtual.setVisible(true);
+        frame.update(model);
+    }
+
     private void fecharJanelaAtualSeExistir() {
         if (janelaAtual != null) {
             if (janelaAtual instanceof TabuleiroFrame) {
@@ -658,6 +802,72 @@ public final class AppController {
         for (PlayerProfile p : playerProfiles)
             if (p.getId() == id) return p.getNome();
         return "J" + (id + 1);
+    }
+
+    @Override
+    public void update(GameModel source) {
+        if (source == null) {
+            return;
+        }
+        if (source.isPartidaEncerrada()) {
+            if (!resumoFinalExibido) {
+                resumoFinalExibido = true;
+                source.getResultadoPartida().ifPresent(this::mostrarResumoFinal);
+            }
+        } else {
+            resumoFinalExibido = false;
+        }
+    }
+
+    private void mostrarResumoFinal(GameModel.ResultadoPartida resultado) {
+        if (resultado == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            String mensagem = construirResumoFinal(resultado);
+            JOptionPane.showMessageDialog(janelaAtual,
+                    mensagem,
+                    "Partida encerrada",
+                    JOptionPane.INFORMATION_MESSAGE);
+            exibirJanelaInicial();
+        });
+    }
+
+    private String construirResumoFinal(GameModel.ResultadoPartida resultado) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(descricaoMotivo(resultado.getMotivo())).append('\n');
+        if (resultado.getVencedorId() >= 0) {
+            sb.append("Vencedor: ")
+              .append(nomePorId(resultado.getVencedorId()))
+              .append('\n');
+        }
+        sb.append('\n').append("Capital apurado:").append('\n');
+        for (GameModel.ResumoCapital rc : resultado.getRanking()) {
+            sb.append(String.format(Locale.ROOT,
+                    "%s — capital %d (saldo %d, patrimônio %d)%s%n",
+                    nomePorId(rc.getJogadorId()),
+                    rc.getCapitalTotal(),
+                    rc.getSaldoDisponivel(),
+                    rc.getPatrimonio(),
+                    rc.isAtivo() ? "" : " — falido"));
+        }
+        return sb.toString();
+    }
+
+    private String descricaoMotivo(GameModel.FimPartidaMotivo motivo) {
+        if (motivo == null) {
+            return "Partida encerrada.";
+        }
+        switch (motivo) {
+            case JANELA_FECHADA:
+                return "Partida encerrada pelo fechamento da janela.";
+            case BOTAO_ENCERRAR:
+                return "Partida encerrada manualmente.";
+            case ULTIMO_JOGADOR_RESTANTE:
+                return "Partida encerrada — restou apenas um jogador ativo.";
+            default:
+                return "Partida encerrada.";
+        }
     }
 
     // =========================================================================

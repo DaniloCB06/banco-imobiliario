@@ -36,6 +36,9 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar");
     private final javax.swing.JButton btnBancoCartas     = new javax.swing.JButton("Abrir banco de cartas");
     private final javax.swing.JButton btnUsarCartaPrisao = new javax.swing.JButton("Usar carta de prisão");
+    private final javax.swing.JButton btnSalvarPartida   = new javax.swing.JButton("Salvar partida");
+    private final javax.swing.JButton btnCarregarPartida = new javax.swing.JButton("Carregar partida");
+    private final javax.swing.JButton btnEncerrarPartida = new javax.swing.JButton("Encerrar partida");
 
     // Nome da casa atual (território) para o popup
     private String nomeCasaParaExibir = null;
@@ -47,8 +50,15 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         this.controller = java.util.Objects.requireNonNull(controller);
 
         setTitle("Banco Imobiliário — Tabuleiro");
-        setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
         setResizable(false);
+
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                controller.solicitarEncerramentoPorFechamento(TabuleiroFrame.this);
+            }
+        });
 
         setSize(new java.awt.Dimension(1000, 780));
         setLocationRelativeTo(null);
@@ -81,6 +91,10 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         btnUsarCartaPrisao.setEnabled(false);
         btnUsarCartaPrisao.setToolTipText("Use a carta de saída livre da prisão quando estiver preso.");
         btnUsarCartaPrisao.addActionListener(e -> usarCartaSaidaLivre());
+
+        btnSalvarPartida.addActionListener(e -> controller.solicitarSalvarPartida(this));
+        btnCarregarPartida.addActionListener(e -> controller.solicitarCarregarPartida(this));
+        btnEncerrarPartida.addActionListener(e -> controller.solicitarEncerramentoViaBotao(this));
 
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
@@ -127,10 +141,27 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         gbc.gridy++; center.add(rbAleatorio, gbc);
         gbc.gridy++; center.add(rbManual, gbc);
 
-        gbc.gridy++; center.add(new javax.swing.JLabel("Dado 1:"), gbc);
-        gbc.gridy++; center.add(cbD1, gbc);
-        gbc.gridy++; center.add(new javax.swing.JLabel("Dado 2:"), gbc);
-        gbc.gridy++; center.add(cbD2, gbc);
+        javax.swing.JPanel manualDicePanel = new javax.swing.JPanel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gbcManual = new java.awt.GridBagConstraints();
+        gbcManual.insets = new java.awt.Insets(2,2,2,2);
+        gbcManual.gridy = 0;
+        gbcManual.gridx = 0;
+        gbcManual.anchor = java.awt.GridBagConstraints.WEST;
+        manualDicePanel.add(new javax.swing.JLabel("Dado 1:"), gbcManual);
+        gbcManual.gridx = 1;
+        gbcManual.anchor = java.awt.GridBagConstraints.EAST;
+        manualDicePanel.add(new javax.swing.JLabel("Dado 2:"), gbcManual);
+        gbcManual.gridy = 1;
+        gbcManual.gridx = 0;
+        gbcManual.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        manualDicePanel.add(cbD1, gbcManual);
+        gbcManual.gridx = 1;
+        manualDicePanel.add(cbD2, gbcManual);
+
+        gbc.gridy++;
+        gbc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        center.add(manualDicePanel, gbc);
+        gbc.fill = java.awt.GridBagConstraints.NONE;
 
         p.add(center, BorderLayout.CENTER);
 
@@ -151,6 +182,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         actions.add(btnBancoCartas);        // <-- botão inserido
         actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnCartaTerritorio);
+        actions.add(javax.swing.Box.createVerticalStrut(12));
+        actions.add(btnSalvarPartida);
+        actions.add(javax.swing.Box.createVerticalStrut(4));
+        actions.add(btnCarregarPartida);
+        actions.add(javax.swing.Box.createVerticalStrut(4));
+        actions.add(btnEncerrarPartida);
 
         lblStatus.setFont(lblStatus.getFont().deriveFont(java.awt.Font.PLAIN, 12f));
         south.add(actions, BorderLayout.NORTH);
@@ -593,17 +630,14 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         public java.awt.Dimension getPreferredSize() {
             java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
             java.awt.Graphics2D g2 = bi.createGraphics();
-            java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
             java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-            g2.setFont(titleFont);
-            int titleH = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent();
             g2.setFont(listFont);
             int lineH  = g2.getFontMetrics().getAscent() + g2.getFontMetrics().getDescent() + 4;
             g2.dispose();
 
-            int innerPad = 10, gapTitle = 8;
+            int innerPad = 10;
             int linhas = Math.max(0, rows.size()) + 1; // jogadores + Banco
-            int h = innerPad + titleH + gapTitle + linhas * lineH + innerPad + 10;
+            int h = innerPad + linhas * lineH + innerPad + 6;
             return new java.awt.Dimension(236, h);
         }
 
@@ -620,29 +654,20 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
                 int w = getWidth();
-                int innerPad = 10, gapTitle = 8;
+                int innerPad = 10;
                 int badgeW = 18, badgeH = 14;
 
                 g2.setColor(new java.awt.Color(0, 0, 0, 110));
                 g2.fillRoundRect(0, 0, w, getHeight(), 12, 12);
 
-                java.awt.Font titleFont = getFont().deriveFont(java.awt.Font.BOLD, 16f);
                 java.awt.Font listFont  = getFont().deriveFont(java.awt.Font.PLAIN, 14f);
-                g2.setFont(titleFont);
-                g2.setColor(java.awt.Color.WHITE);
-                int titleAscent = g2.getFontMetrics().getAscent();
-                int titleDescent = g2.getFontMetrics().getDescent();
-                int titleH = titleAscent + titleDescent;
-                int titleBase = innerPad + titleAscent;
-                g2.drawString("Saldos", innerPad + 2, titleBase);
-
                 g2.setFont(listFont);
                 java.awt.FontMetrics fm = g2.getFontMetrics();
                 int fmAscent  = fm.getAscent();
                 int fmDescent = fm.getDescent();
                 int lineH     = fmAscent + fmDescent + 4;
 
-                int cy = innerPad + titleH + gapTitle;
+                int cy = innerPad;
 
                 int paddingRight = 12;
                 int moneyRightX = w - paddingRight;
@@ -703,7 +728,16 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 dicePanel.setDice(d1, d2);
             }
 
-            atualizarUIJogadorDaVez();
+            boolean partidaEncerrada = false;
+            try {
+                partidaEncerrada = m.isPartidaEncerrada();
+            } catch (Throwable ignore) {}
+
+            if (partidaEncerrada) {
+                lblStatus.setText("Partida encerrada.");
+            } else {
+                atualizarUIJogadorDaVez();
+            }
 
             boardPanel.repaint();
             moneyPanel.refreshFromModel(m);
@@ -720,7 +754,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
             if (territorioAtual.isPresent()) {
                 nomeCasaParaExibir = territorioAtual.get();
-                btnCartaTerritorio.setEnabled(!bloqueiaCarta);
+                btnCartaTerritorio.setEnabled(!partidaEncerrada && !bloqueiaCarta);
             } else {
                 nomeCasaParaExibir = null;
                 btnCartaTerritorio.setEnabled(false);
@@ -731,13 +765,13 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             try {
                 saiuDupla = m.houveDuplaNoUltimoLancamento();
             } catch (Throwable ignore) {}
-            btnEncerrarVez.setEnabled(!saiuDupla);
+            btnEncerrarVez.setEnabled(!partidaEncerrada && !saiuDupla);
 
             boolean podeUsarCartaPrisao = false;
             try {
                 podeUsarCartaPrisao = m.isJogadorDaVezNaPrisao() && m.jogadorDaVezTemCartaSaidaLivre();
             } catch (Throwable ignore) {}
-            btnUsarCartaPrisao.setEnabled(podeUsarCartaPrisao);
+            btnUsarCartaPrisao.setEnabled(!partidaEncerrada && podeUsarCartaPrisao);
 
             // Popup de Sorte/Revés (one-shot)
             try {
@@ -774,16 +808,31 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
             // ---- Habilita "Jogar" apenas quando o Model permitir (evita 2º clique no turno) ----
             boolean podeJogar = false;
-            try { podeJogar = m.podeLancarDadosNesteTurno(); } catch (Throwable ignore) {}
-            btnJogar.setEnabled(podeJogar);
+            if (!partidaEncerrada) {
+                try { podeJogar = m.podeLancarDadosNesteTurno(); } catch (Throwable ignore) {}
+            }
+            btnJogar.setEnabled(!partidaEncerrada && podeJogar);
 
             // ---- Habilita "Abrir banco de cartas" somente se o jogador da vez tiver algo ----
             try {
                 int idVez = m.getJogadorDaVez();
                 boolean podeAbrirBanco = m.jogadorPossuiAlgumaCartaOuPropriedade(idVez);
-                btnBancoCartas.setEnabled(podeAbrirBanco);
+                btnBancoCartas.setEnabled(!partidaEncerrada && podeAbrirBanco);
             } catch (Throwable ignore) {
                 btnBancoCartas.setEnabled(false);
+            }
+
+            boolean podeSalvar = false;
+            try { podeSalvar = m.isSalvamentoDisponivel(); } catch (Throwable ignore) {}
+            btnSalvarPartida.setEnabled(podeSalvar);
+            btnCarregarPartida.setEnabled(true);
+            btnEncerrarPartida.setEnabled(!partidaEncerrada);
+
+            if (partidaEncerrada) {
+                btnEncerrarVez.setEnabled(false);
+                btnUsarCartaPrisao.setEnabled(false);
+                btnBancoCartas.setEnabled(false);
+                btnCartaTerritorio.setEnabled(false);
             }
         });
     }

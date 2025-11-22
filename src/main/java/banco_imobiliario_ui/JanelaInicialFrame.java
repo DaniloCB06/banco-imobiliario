@@ -66,7 +66,11 @@ public final class JanelaInicialFrame extends JFrame {
         JButton btnIniciar = new JButton("Iniciar");
         btnIniciar.addActionListener(e -> onIniciar());
 
+        JButton btnCarregar = new JButton("Carregar partida...");
+        btnCarregar.addActionListener(e -> controller.solicitarCarregarPartida(this));
+
         footer.add(btnCancelar);
+        footer.add(btnCarregar);
         footer.add(btnIniciar);
         root.add(footer, BorderLayout.SOUTH);
 
