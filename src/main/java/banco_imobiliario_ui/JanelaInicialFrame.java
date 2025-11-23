@@ -61,13 +61,28 @@ public final class JanelaInicialFrame extends JFrame {
         // Rodapé: botões
         JPanel footer = new JPanel();
         JButton btnCancelar = new JButton("Cancelar");
-        btnCancelar.addActionListener(e -> System.exit(0));
+        btnCancelar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                System.exit(0);
+            }
+        });
 
         JButton btnIniciar = new JButton("Iniciar");
-        btnIniciar.addActionListener(e -> onIniciar());
+        btnIniciar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                onIniciar();
+            }
+        });
 
         JButton btnCarregar = new JButton("Carregar partida...");
-        btnCarregar.addActionListener(e -> controller.solicitarCarregarPartida(this));
+        btnCarregar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                controller.solicitarCarregarPartida(JanelaInicialFrame.this);
+            }
+        });
 
         footer.add(btnCancelar);
         footer.add(btnCarregar);

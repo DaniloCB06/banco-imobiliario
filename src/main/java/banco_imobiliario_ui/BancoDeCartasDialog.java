@@ -51,7 +51,13 @@ public final class BancoDeCartasDialog extends JDialog {
             row.add(lbl, BorderLayout.CENTER);
 
             JButton btn = new JButton("Visualizar");
-            btn.addActionListener(e -> visualizar(it));
+            final banco_imobiliario_models.GameModel.BancoDeCartasItem itemRef = it;
+            btn.addActionListener(new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    visualizar(itemRef);
+                }
+            });
             row.add(btn, BorderLayout.EAST);
 
             listPanel.add(row);
@@ -64,7 +70,12 @@ public final class BancoDeCartasDialog extends JDialog {
 
         JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton fechar = new JButton("Fechar");
-        fechar.addActionListener(e -> dispose());
+        fechar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                dispose();
+            }
+        });
         south.add(fechar);
         add(south, BorderLayout.SOUTH);
     }

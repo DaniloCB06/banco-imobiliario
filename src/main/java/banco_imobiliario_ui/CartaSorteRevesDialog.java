@@ -35,7 +35,12 @@ public final class CartaSorteRevesDialog extends JDialog {
         content.add(center, BorderLayout.CENTER);
 
         JButton ok = new JButton("OK");
-        ok.addActionListener(e -> dispose());
+        ok.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                dispose();
+            }
+        });
         JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         south.add(ok);
         content.add(south, BorderLayout.SOUTH);

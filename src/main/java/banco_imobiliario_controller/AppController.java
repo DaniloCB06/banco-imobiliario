@@ -61,10 +61,13 @@ public final class AppController implements GameModel.Observer {
     // [2] Fluxo de UI (navegação entre janelas)
     // =========================================================================
     public void exibirJanelaInicial() {
-        SwingUtilities.invokeLater(() -> {
-            fecharJanelaAtualSeExistir();
-            janelaAtual = new JanelaInicialFrame(this);
-            janelaAtual.setVisible(true);
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                fecharJanelaAtualSeExistir();
+                janelaAtual = new JanelaInicialFrame(AppController.this);
+                janelaAtual.setVisible(true);
+            }
         });
         // garante tabuleiro carregado para quem entrar direto
         garantirTabuleiroCarregado();
@@ -398,9 +401,36 @@ public final class AppController implements GameModel.Observer {
                 );
                 Object dlg = c.newInstance(
                         (javax.swing.JFrame) janelaAtual, titulo, icon,
-                        (Runnable) () -> { try { comprarPropriedade(); } catch (Throwable __) {} },
-                        (Runnable) () -> { try { construirCasaNaCasaAtual(); } catch (Throwable __) {} },
-                        (Runnable) () -> { try { construirHotelNaCasaAtual(); } catch (Throwable __) {} },
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    comprarPropriedade();
+                                } catch (Throwable __) {
+                                    // ignorado
+                                }
+                            }
+                        },
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    construirCasaNaCasaAtual();
+                                } catch (Throwable __) {
+                                    // ignorado
+                                }
+                            }
+                        },
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    construirHotelNaCasaAtual();
+                                } catch (Throwable __) {
+                                    // ignorado
+                                }
+                            }
+                        },
                         habilitarComprar, habilitarCasa, habilitarHotel,
                         null // resumo opcional
                 );
@@ -418,7 +448,16 @@ public final class AppController implements GameModel.Observer {
                 );
                 Object dlg = c.newInstance(
                         (javax.swing.JFrame) janelaAtual, titulo, icon,
-                        (Runnable) () -> { try { comprarPropriedade(); } catch (Throwable __) {} },
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    comprarPropriedade();
+                                } catch (Throwable __) {
+                                    // ignorado
+                                }
+                            }
+                        },
                         habilitarComprar
                 );
                 if (dlg instanceof javax.swing.JDialog) {
@@ -722,9 +761,12 @@ public final class AppController implements GameModel.Observer {
     // [6] Ciclo de vida da janela atual
     // =========================================================================
     public void exibirErro(String mensagem) {
-        SwingUtilities.invokeLater(
-            () -> JOptionPane.showMessageDialog(janelaAtual, mensagem, "Erro", JOptionPane.ERROR_MESSAGE)
-        );
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                JOptionPane.showMessageDialog(janelaAtual, mensagem, "Erro", JOptionPane.ERROR_MESSAGE);
+            }
+        });
     }
 
     private void abrirTabuleiroPrincipal() {
@@ -793,11 +835,21 @@ public final class AppController implements GameModel.Observer {
 
         Map<Integer, Set<Integer>> porSoma = new HashMap<>();
         for (Map.Entry<Integer, Integer> e : soma.entrySet()) {
-            porSoma.computeIfAbsent(e.getValue(), k -> new HashSet<>()).add(e.getKey());
+            Set<Integer> ids = porSoma.get(e.getValue());
+            if (ids == null) {
+                ids = new HashSet<>();
+                porSoma.put(e.getValue(), ids);
+            }
+            ids.add(e.getKey());
         }
 
         List<Integer> somasDesc = new ArrayList<>(porSoma.keySet());
-        somasDesc.sort((a, b) -> Integer.compare(b, a));
+        somasDesc.sort(new java.util.Comparator<Integer>() {
+            @Override
+            public int compare(Integer a, Integer b) {
+                return Integer.compare(b, a);
+            }
+        });
 
         List<Integer> ordem = new ArrayList<>();
         for (int s : somasDesc) {
@@ -836,13 +888,16 @@ public final class AppController implements GameModel.Observer {
         if (resultado == null) {
             return;
         }
-        SwingUtilities.invokeLater(() -> {
-            String mensagem = construirResumoFinal(resultado);
-            JOptionPane.showMessageDialog(janelaAtual,
-                    mensagem,
-                    "Partida encerrada",
-                    JOptionPane.INFORMATION_MESSAGE);
-            exibirJanelaInicial();
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                String mensagem = construirResumoFinal(resultado);
+                JOptionPane.showMessageDialog(janelaAtual,
+                        mensagem,
+                        "Partida encerrada",
+                        JOptionPane.INFORMATION_MESSAGE);
+                exibirJanelaInicial();
+            }
         });
     }
 
@@ -857,12 +912,12 @@ public final class AppController implements GameModel.Observer {
         sb.append('\n').append("Capital apurado:").append('\n');
         for (GameModel.ResumoCapital rc : resultado.getRanking()) {
             sb.append(String.format(Locale.ROOT,
-                    "%s — capital %d (saldo %d, patrimônio %d)%s%n",
+                    "%s - capital %d (saldo %d, patrimônio %d)%s%n",
                     nomePorId(rc.getJogadorId()),
                     rc.getCapitalTotal(),
                     rc.getSaldoDisponivel(),
                     rc.getPatrimonio(),
-                    rc.isAtivo() ? "" : " — falido"));
+                    rc.isAtivo() ? "" : " - falido"));
         }
         return sb.toString();
     }

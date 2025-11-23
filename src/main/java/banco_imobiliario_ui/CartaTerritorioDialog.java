@@ -124,27 +124,36 @@ public final class CartaTerritorioDialog extends JDialog {
             // Comprar
             btnComprar.setEnabled(habilitarComprar);
             btnComprar.setToolTipText("Comprar este território (se não tiver dono e houver saldo)");
-            btnComprar.addActionListener(e -> {
-                invokeSafely(this.onComprar);
-                disposeAfterAction();
+            btnComprar.addActionListener(new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    invokeSafely(CartaTerritorioDialog.this.onComprar);
+                    disposeAfterAction();
+                }
             });
             actions.add(btnComprar);
 
             // Construir casa
             btnCasa.setEnabled(habilitarCasa);
             btnCasa.setToolTipText("Construir UMA casa nesta queda (após já ser dono e em quedas subsequentes)");
-            btnCasa.addActionListener(e -> {
-                invokeSafely(this.onConstruirCasa);
-                disposeAfterAction();
+            btnCasa.addActionListener(new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    invokeSafely(CartaTerritorioDialog.this.onConstruirCasa);
+                    disposeAfterAction();
+                }
             });
             actions.add(btnCasa);
 
             // Construir hotel
             btnHotel.setEnabled(habilitarHotel);
             btnHotel.setToolTipText("Construir UM hotel nesta queda (após já possuir ≥1 casa)");
-            btnHotel.addActionListener(e -> {
-                invokeSafely(this.onConstruirHotel);
-                disposeAfterAction();
+            btnHotel.addActionListener(new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    invokeSafely(CartaTerritorioDialog.this.onConstruirHotel);
+                    disposeAfterAction();
+                }
             });
             actions.add(btnHotel);
 
@@ -154,7 +163,12 @@ public final class CartaTerritorioDialog extends JDialog {
         // Botão fechar à direita (sempre presente)
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
         JButton fechar = new JButton("Fechar");
-        fechar.addActionListener(e -> dispose());
+        fechar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                dispose();
+            }
+        });
         right.add(fechar);
         south.add(right, BorderLayout.EAST);
 
@@ -165,7 +179,12 @@ public final class CartaTerritorioDialog extends JDialog {
 
         // Acessibilidade: ESC fecha
         getRootPane().registerKeyboardAction(
-            e -> dispose(),
+            new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    dispose();
+                }
+            },
             KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );

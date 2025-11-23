@@ -70,26 +70,52 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
         // Botão de carta (território)
         btnCartaTerritorio.setEnabled(false);
-        btnCartaTerritorio.addActionListener(e -> {
-            if (nomeCasaParaExibir != null) {
-                controller.exibirCartaTerritorio(nomeCasaParaExibir);
+        btnCartaTerritorio.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (nomeCasaParaExibir != null) {
+                    controller.exibirCartaTerritorio(nomeCasaParaExibir);
+                }
             }
         });
 
         // Botão "Encerrar vez" — passa a vez (desabilitado em caso de DUPLA)
         btnEncerrarVez.setEnabled(true);
         btnEncerrarVez.setToolTipText("Encerrar as ações e passar a vez (desabilita se saiu dupla).");
-        btnEncerrarVez.addActionListener(e -> {
-            controller.getModel().encerrarAcoesDaVezEPassarTurno();
+        btnEncerrarVez.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                controller.getModel().encerrarAcoesDaVezEPassarTurno();
+            }
         });
 
         // Botão "Abrir banco de cartas" — visível ao lado dos demais
         btnBancoCartas.setEnabled(false);
-        btnBancoCartas.addActionListener(e -> abrirBancoDeCartas());
+        btnBancoCartas.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                abrirBancoDeCartas();
+            }
+        });
 
-        btnSalvarPartida.addActionListener(e -> controller.solicitarSalvarPartida(this));
-        btnCarregarPartida.addActionListener(e -> controller.solicitarCarregarPartida(this));
-        btnEncerrarPartida.addActionListener(e -> controller.solicitarEncerramentoViaBotao(this));
+        btnSalvarPartida.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                controller.solicitarSalvarPartida(TabuleiroFrame.this);
+            }
+        });
+        btnCarregarPartida.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                controller.solicitarCarregarPartida(TabuleiroFrame.this);
+            }
+        });
+        btnEncerrarPartida.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                controller.solicitarEncerramentoViaBotao(TabuleiroFrame.this);
+            }
+        });
 
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(boardPanel, BorderLayout.CENTER);
@@ -129,8 +155,18 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         bg.add(rbAleatorio);
         bg.add(rbManual);
 
-        rbAleatorio.addActionListener(e -> toggleManual(false));
-        rbManual.addActionListener(e -> toggleManual(true));
+        rbAleatorio.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                toggleManual(false);
+            }
+        });
+        rbManual.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                toggleManual(true);
+            }
+        });
 
         center.add(new javax.swing.JLabel("Modo dos dados:"), gbc);
         gbc.gridy++; center.add(rbAleatorio, gbc);
@@ -164,7 +200,12 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         javax.swing.JPanel south = new javax.swing.JPanel(new BorderLayout(4,4));
 
         // usa o campo btnJogar
-        btnJogar.addActionListener(this::onJogar);
+        btnJogar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                onJogar(e);
+            }
+        });
 
         javax.swing.JPanel actions = new javax.swing.JPanel();
         actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.Y_AXIS));
@@ -228,13 +269,25 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     // =========================================================================
     private void atualizarUIJogadorDaVez() {
         int id = controller.getModel().getJogadorDaVez();
-        banco_imobiliario_controller.PlayerProfile p = controller.getPlayerProfiles().stream()
-                .filter(pp -> pp.getId() == id).findFirst().orElse(null);
+        banco_imobiliario_controller.PlayerProfile p = buscarPerfilPorId(id);
 
         String nome = (p != null ? p.getNome() : "J" + (id + 1));
         lblStatus.setText("Vez de: " + nome + "  (clique em Jogar)");
         dicePanel.setPlayerColor(p != null ? p.getCor() : new Color(200,200,200));
         dicePanel.repaint();
+    }
+
+    private banco_imobiliario_controller.PlayerProfile buscarPerfilPorId(int id) {
+        java.util.List<banco_imobiliario_controller.PlayerProfile> perfis = controller.getPlayerProfiles();
+        if (perfis == null) {
+            return null;
+        }
+        for (banco_imobiliario_controller.PlayerProfile perfil : perfis) {
+            if (perfil.getId() == id) {
+                return perfil;
+            }
+        }
+        return null;
     }
 
     public void repaintBoard() {
@@ -702,7 +755,9 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     // =========================================================================
     @Override
     public void update(banco_imobiliario_models.GameModel m) {
-        javax.swing.SwingUtilities.invokeLater(() -> {
+        javax.swing.SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
             Integer d1 = m.getUltimoD1();
             Integer d2 = m.getUltimoD2();
             if (d1 != null && d2 != null) {
@@ -808,6 +863,7 @@ public final class TabuleiroFrame extends javax.swing.JFrame
                 btnBancoCartas.setEnabled(false);
                 btnCartaTerritorio.setEnabled(false);
             }
+            }
         });
     }
 
@@ -825,11 +881,8 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         }
 
         // Título com o nome do jogador da vez
-        String nomeJogador = controller.getPlayerProfiles().stream()
-                .filter(pp -> pp.getId() == idVez)
-                .map(banco_imobiliario_controller.PlayerProfile::getNome)
-                .findFirst()
-                .orElse("Jogador " + (idVez + 1));
+        banco_imobiliario_controller.PlayerProfile perfil = buscarPerfilPorId(idVez);
+        String nomeJogador = (perfil != null ? perfil.getNome() : "Jogador " + (idVez + 1));
         String titulo = "Banco de cartas — " + nomeJogador;
 
         // Lista consolidada (territórios + sorte/revés) para o diálogo

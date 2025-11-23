@@ -16,7 +16,7 @@ final class TabuleiroOficialFactory {
         final int PRECO_HOTEL = 400;
 
         final int PRECO_COMPANHIA = 200;
-        final int ALUGUEL_COMPANHIA = 20000;
+        final int ALUGUEL_COMPANHIA = 200000;
 
         // ===== Lado inferior (0..9) – já estava certo =====
         casas.add(new Casa(0,  "Ponto de Partida", "PONTO_PARTIDA"));

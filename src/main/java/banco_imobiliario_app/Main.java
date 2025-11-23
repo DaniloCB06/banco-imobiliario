@@ -7,8 +7,11 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            AppController.getInstance().exibirJanelaInicial();
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                AppController.getInstance().exibirJanelaInicial();
+            }
         });
     }
 }

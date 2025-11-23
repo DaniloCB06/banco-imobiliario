@@ -50,7 +50,12 @@ public final class SorteRevesManager {
         if (chosen < 0) return Optional.empty();
 
         disponiveis.remove(chosen);
-        bancoPorJogador.computeIfAbsent(jogadorId, k -> new HashSet<>()).add(chosen);
+        Set<Integer> cartas = bancoPorJogador.get(jogadorId);
+        if (cartas == null) {
+            cartas = new HashSet<>();
+            bancoPorJogador.put(jogadorId, cartas);
+        }
+        cartas.add(chosen);
         ultimaCartaId = chosen;
         return Optional.of(catalogo.get(chosen));
     }

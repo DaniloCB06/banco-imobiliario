@@ -86,17 +86,19 @@ public final class GamePersistenceService {
         addLinha(linhas, "sr.ultima", formatOptional(estado.getUltimaCartaNumero()));
         addLinha(linhas, "sr.buffer", formatOptional(estado.getCartaBufferNumero()));
 
-        estado.getCartasSRPorJogador().entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> addLinha(linhas, "sr.cards." + entry.getKey(), join(entry.getValue())));
+        List<Map.Entry<Integer, Set<Integer>>> cartasOrdenadas = new ArrayList<>(estado.getCartasSRPorJogador().entrySet());
+        cartasOrdenadas.sort(Map.Entry.comparingByKey());
+        for (Map.Entry<Integer, Set<Integer>> entry : cartasOrdenadas) {
+            addLinha(linhas, "sr.cards." + entry.getKey(), join(entry.getValue()));
+        }
 
-        estado.getPropriedades().stream()
-                .sorted(Comparator.comparingInt(GameModel.PropertyState::getPosicao))
-                .forEach(prop -> {
-                    String key = "property." + prop.getPosicao();
-                    String linha = prop.getDonoId() + "," + prop.getNumCasas() + "," + flag(prop.hasHotel());
-                    addLinha(linhas, key, linha);
-                });
+        List<GameModel.PropertyState> propriedadesOrdenadas = new ArrayList<>(estado.getPropriedades());
+        propriedadesOrdenadas.sort(Comparator.comparingInt(GameModel.PropertyState::getPosicao));
+        for (GameModel.PropertyState prop : propriedadesOrdenadas) {
+            String key = "property." + prop.getPosicao();
+            String linha = prop.getDonoId() + "," + prop.getNumCasas() + "," + flag(prop.hasHotel());
+            addLinha(linhas, key, linha);
+        }
 
         escreverArquivoOrdenado(arquivo, linhas);
     }

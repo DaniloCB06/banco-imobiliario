@@ -152,7 +152,12 @@ public class GameModel {
         String descricao = def != null ? def.getDescricao() : "";
 
         SorteRevesCard card = new SorteRevesCard(numero, titulo, descricao);
-        cartasSRPorJogador.computeIfAbsent(jogadorId, k -> new HashSet<>()).add(numero);
+        Set<Integer> cartas = cartasSRPorJogador.get(jogadorId);
+        if (cartas == null) {
+            cartas = new HashSet<>();
+            cartasSRPorJogador.put(jogadorId, cartas);
+        }
+        cartas.add(numero);
         ultimaCartaSR = Optional.of(card);
         srRecemSacada = Optional.of(card);
         aplicarEfeitoCartaSorteReves(jogadorId, numero, def);
@@ -283,15 +288,8 @@ public class GameModel {
         String tipo = c.getTipo() == null ? "" : c.getTipo();
         String nome = c.getNome() == null ? "" : c.getNome();
 
-        // normaliza: remove acentos e unifica separadores
-        java.util.function.Function<String,String> norm = s -> {
-            String n = Normalizer.normalize(s, Normalizer.Form.NFD)
-                    .replaceAll("\\p{M}+", ""); // remove acentos
-            n = n.replace('/', '_').replace('-', '_').replace(' ', '_');
-            return n.toUpperCase(Locale.ROOT);
-        };
-        String T = norm.apply(tipo);
-        String N = norm.apply(nome);
+        String T = normalizarCampoSorteReves(tipo);
+        String N = normalizarCampoSorteReves(nome);
 
         if (T.contains("CHANCE") || N.contains("CHANCE")) return true;
         if ((T.contains("SORTE") && (T.contains("REVES") || T.contains("REVEZ"))) ||
@@ -299,6 +297,14 @@ public class GameModel {
         if (tipo.contains("?") || nome.contains("?")) return true;
 
         return T.equals("SORTE_REVES") || T.equals("INTERROGACAO") || T.equals("SORTE_REVEZ");
+    }
+
+    private String normalizarCampoSorteReves(String valor) {
+        String base = valor == null ? "" : valor;
+        String n = Normalizer.normalize(base, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        n = n.replace('/', '_').replace('-', '_').replace(' ', '_');
+        return n.toUpperCase(Locale.ROOT);
     }
 
     // =====================================================================================
@@ -1364,14 +1370,19 @@ public class GameModel {
             }
             lista.add(new ResumoCapital(j.getId(), j.getSaldo(), patrimonio, j.isAtivo()));
         }
-        lista.sort((a, b) -> {
-            int cmp = Integer.compare(b.getCapitalTotal(), a.getCapitalTotal());
-            if (cmp != 0)
-                return cmp;
-            cmp = Integer.compare(b.getSaldoDisponivel(), a.getSaldoDisponivel());
-            if (cmp != 0)
-                return cmp;
-            return Integer.compare(a.getJogadorId(), b.getJogadorId());
+        lista.sort(new java.util.Comparator<ResumoCapital>() {
+            @Override
+            public int compare(ResumoCapital a, ResumoCapital b) {
+                int cmp = Integer.compare(b.getCapitalTotal(), a.getCapitalTotal());
+                if (cmp != 0) {
+                    return cmp;
+                }
+                cmp = Integer.compare(b.getSaldoDisponivel(), a.getSaldoDisponivel());
+                if (cmp != 0) {
+                    return cmp;
+                }
+                return Integer.compare(a.getJogadorId(), b.getJogadorId());
+            }
         });
         return lista;
     }
@@ -1665,9 +1676,12 @@ public class GameModel {
 
         for (Jogador jogador : jogadores) {
             if (jogador != null && jogador.temCartaSaidaLivre()) {
-                cartasSRPorJogador
-                        .computeIfAbsent(jogador.getId(), k -> new HashSet<>())
-                        .add(9);
+                Set<Integer> cartas = cartasSRPorJogador.get(jogador.getId());
+                if (cartas == null) {
+                    cartas = new HashSet<>();
+                    cartasSRPorJogador.put(jogador.getId(), cartas);
+                }
+                cartas.add(9);
             }
         }
 

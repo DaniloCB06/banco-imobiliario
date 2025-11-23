@@ -106,10 +106,20 @@ public final class DefinicaoJogadoresDialog extends JDialog {
         // ---------- Footer ----------
         JPanel footer = new JPanel();
         JButton cancelar = new JButton("Cancelar");
-        cancelar.addActionListener(e -> dispose());
+        cancelar.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                dispose();
+            }
+        });
 
         JButton ok = new JButton("Confirmar");
-        ok.addActionListener(e -> onConfirmar());
+        ok.addActionListener(new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                onConfirmar();
+            }
+        });
 
         footer.add(cancelar);
         footer.add(ok);
