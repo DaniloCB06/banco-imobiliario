@@ -15,15 +15,20 @@ final class TabuleiroOficialFactory {
         BiFunction<String,Integer,Propriedade> prop = (nome, pos) ->
             new Propriedade(pos, nome, /*preço terreno*/200, /*casa*/100, /*hotel*/400, ALUGUEIS);
 
+        final int PRECO_COMPANHIA = 200;
+        final int ALUGUEL_COMPANHIA = 200;
+        BiFunction<String,Integer,Companhia> companhia = (nome, pos) ->
+            new Companhia(pos, nome, PRECO_COMPANHIA, ALUGUEL_COMPANHIA);
+
         // ===== Lado inferior (0..9) – já estava certo =====
         casas.add(new Casa(0,  "Ponto de Partida", "PONTO_PARTIDA"));
         casas.add(prop.apply("Leblon", 1));
         casas.add(new Casa(2,  "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Av. Presidente Vargas", 3));
         casas.add(prop.apply("Av. Nossa Sra. de Copacabana", 4));
-        casas.add(new Casa(5,  "Companhia de Trem", "SERVICO"));
+        casas.add(companhia.apply("Companhia de Trem", 5));
         casas.add(prop.apply("Av. Brig. Faria Lima", 6));
-        casas.add(new Casa(7,  "Companhia de Ônibus", "SERVICO"));
+        casas.add(companhia.apply("Companhia de Ônibus", 7));
         casas.add(prop.apply("Av. Rebouças", 8));
         casas.add(prop.apply("Av. 9 de Julho", 9));
 
@@ -35,7 +40,7 @@ final class TabuleiroOficialFactory {
         casas.add(new Casa(12, "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Rua Augusta", 13));
         casas.add(prop.apply("Av. Pacaembu", 14));
-        casas.add(new Casa(15, "Companhia de Táxi", "SERVICO"));
+        casas.add(companhia.apply("Companhia de Táxi", 15));
         casas.add(new Casa(16, "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Interlagos", 17));
         casas.add(new Casa(18, "Lucros e Dividendos", "LUCRO", 200));
@@ -49,7 +54,7 @@ final class TabuleiroOficialFactory {
         casas.add(new Casa(22, "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Botafogo", 23));
         casas.add(new Casa(24, "Imposto de Renda", "IMPOSTO", 200)); // símbolo do dinheiro (vermelho)
-        casas.add(new Casa(25, "Companhia Marítima", "SERVICO"));    // “navio”
+        casas.add(companhia.apply("Companhia Marítima", 25));    // “navio”
         casas.add(prop.apply("Av. Brasil", 26));
         casas.add(new Casa(27, "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Av. Paulista", 28));
@@ -60,10 +65,10 @@ final class TabuleiroOficialFactory {
 
         // ===== Lado direito (31..39) – manteve =====
         casas.add(prop.apply("Copacabana", 31));
-        casas.add(new Casa(32, "Companhia Aérea", "SERVICO"));
+        casas.add(companhia.apply("Companhia Aérea", 32));
         casas.add(prop.apply("Av. Vieira Souto", 33));
         casas.add(prop.apply("Av. Atlântica", 34));
-        casas.add(new Casa(35, "Companhia de Serviços", "SERVICO"));
+        casas.add(companhia.apply("Companhia de Serviços", 35));
         casas.add(prop.apply("Ipanema", 36));
         casas.add(new Casa(37, "Sorte/Revés", "CARTA"));
         casas.add(prop.apply("Jardim Paulista", 38));

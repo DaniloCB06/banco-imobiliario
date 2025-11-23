@@ -73,6 +73,36 @@ public class CompraTest {
         assertEquals(destino % nCasas, game.getPosicaoJogador(game.getJogadorDaVez()));
         assertFalse(game.comprarPropriedade());
     }
+
+    @Test
+    public void deveComprarCompanhiaQuandoTemSaldo() {
+        game.novaPartida(2, 2024L);
+
+        GameModel.ResultadoDados rd = game.lancarDados();
+        int destino = rd.getSoma();
+        int nCasas = 12;
+
+        game.carregarTabuleiroDeTesteComUmaCompanhia(nCasas, destino, 300, 200);
+        game.deslocarPiao();
+
+        assertEquals(destino % nCasas, game.getPosicaoJogador(game.getJogadorDaVez()));
+        assertTrue(game.comprarPropriedade());
+    }
+
+    @Test
+    public void naoDeveComprarCompanhiaSemSaldo() {
+        game.novaPartida(2, 9090L);
+
+        GameModel.ResultadoDados rd = game.lancarDados();
+        int destino = rd.getSoma();
+        int nCasas = 16;
+
+        game.carregarTabuleiroDeTesteComUmaCompanhia(nCasas, destino, 6000, 200);
+        game.deslocarPiao();
+
+        assertEquals(destino % nCasas, game.getPosicaoJogador(game.getJogadorDaVez()));
+        assertFalse(game.comprarPropriedade());
+    }
     
     @Test
     public void naoDeveComprarPropriedadeQueJaTemDono() {

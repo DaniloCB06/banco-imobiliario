@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Propriedade comprável no tabuleiro (terreno). */
-final class Propriedade extends Casa {
+final class Propriedade extends Casa implements AtivoCompravel {
 
     // ===========================
     // [A] Preços fixos por nome
@@ -118,18 +118,26 @@ final class Propriedade extends Casa {
     int getPrecoCasa()    { return precoCompraCasa; }
     int getPrecoHotel()   { return precoCompraHotel; }
 
-    boolean temDono() { return dono != null; }
-    Jogador getDono() { return dono; }
-    void setDono(Jogador novoDono) { this.dono = novoDono; }
+    @Override
+    public boolean temDono() { return dono != null; }
+    @Override
+    public Jogador getDono() { return dono; }
+    @Override
+    public void setDono(Jogador novoDono) { this.dono = novoDono; }
 
     int getNumCasas() { return numCasas; }
     boolean temHotel() { return hotel; }
 
-    int getPosicao() { return this.posicao; }
+    @Override
+    public int getPosicao() { return this.posicao; }
+
+    @Override
+    public int getPrecoCompra() { return getPrecoTerreno(); }
 
     // ===== Aluguel (regra nova) =====
     /** Va = 10%V + 15%V*n + (hotel? 30%V : 0) */
-    int calcularAluguelAtual() {
+    @Override
+    public int calcularAluguel() {
         if (precoTerreno <= 0) return 0;
         int vb = (precoTerreno * 10) / 100;              // 10%
         int vc = (precoTerreno * 15) / 100;              // 15% por casa
@@ -155,7 +163,8 @@ final class Propriedade extends Casa {
     }
 
     /** Valor agregado = terreno + (numCasas * preçoCasa) + (hotel ? preçoHotel : 0). */
-    int valorAgregadoAtual() {
+    @Override
+    public int valorAgregadoAtual() {
         long base = (long) precoTerreno
                   + (long) numCasas * (long) precoCompraCasa
                   + (hotel ? (long) precoCompraHotel : 0L);
@@ -164,7 +173,8 @@ final class Propriedade extends Casa {
     }
 
     /** Devolve a propriedade ao banco: sem dono e sem construções. */
-    void resetarParaBanco() {
+    @Override
+    public void resetarParaBanco() {
         this.dono = null;
         this.numCasas = 0;
         this.hotel = false;

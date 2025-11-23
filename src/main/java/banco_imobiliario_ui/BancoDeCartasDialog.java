@@ -39,9 +39,14 @@ public final class BancoDeCartasDialog extends JDialog {
             JPanel row = new JPanel(new BorderLayout(6,6));
             row.setBorder(BorderFactory.createEmptyBorder(6,12,6,12));
 
-            String prefix = it.getTipo() == banco_imobiliario_models.GameModel.BancoDeCartasItem.Tipo.TERRITORIO
-                    ? "[Território] "
-                    : "[Sorte/Revés] ";
+            String prefix;
+            if (it.getTipo() == banco_imobiliario_models.GameModel.BancoDeCartasItem.Tipo.TERRITORIO) {
+                prefix = "[Território] ";
+            } else if (it.getTipo() == banco_imobiliario_models.GameModel.BancoDeCartasItem.Tipo.COMPANHIA) {
+                prefix = "[Companhia] ";
+            } else {
+                prefix = "[Sorte/Revés] ";
+            }
             JLabel lbl = new JLabel(prefix + it.getNome());
             row.add(lbl, BorderLayout.CENTER);
 

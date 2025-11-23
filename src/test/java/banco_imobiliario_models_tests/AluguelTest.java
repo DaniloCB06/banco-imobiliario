@@ -100,4 +100,26 @@ public class AluguelTest {
         assertNotNull(t.getMotivo());
         assertTrue(t.getMotivo().toLowerCase().contains("não é propriedade"));
     }
+
+    @Test
+    public void cobraAluguelFixoEmCompanhia() {
+        GameModel gm = new GameModel();
+        gm.novaPartida(2, 555L);
+        gm.carregarTabuleiroDeTesteComUmaCompanhia(10, 4, 300, 200);
+        gm.debugForcarDonoDaCompanhia(4, 1);
+        gm.debugForcarPosicaoJogador(0, 4);
+
+        int saldoPagadorAntes = gm.getSaldoJogador(0);
+        int saldoDonoAntes = gm.getSaldoJogador(1);
+
+        Transacao t = gm.aplicarEfeitosObrigatoriosPosMovimento();
+
+        assertTrue(t.isEfetuada());
+        assertEquals("ALUGUEL", t.getTipo());
+        assertEquals(200, t.getValor());
+        assertEquals(Integer.valueOf(1), t.getRecebedorId());
+
+        assertEquals(saldoPagadorAntes - 200, gm.getSaldoJogador(0));
+        assertEquals(saldoDonoAntes + 200, gm.getSaldoJogador(1));
+    }
 }

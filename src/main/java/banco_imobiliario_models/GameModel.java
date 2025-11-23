@@ -538,12 +538,11 @@ public class GameModel {
 
         final Jogador j = jogadores.get(getJogadorDaVez());
         final Casa casa = tabuleiro.getCasa(j.getPosicao());
+        final AtivoCompravel ativo = asAtivoCompravel(casa);
+        if (ativo == null) return false;
 
-        if (!(casa instanceof Propriedade)) return false;
-        final Propriedade p = (Propriedade) casa;
-
-        if (p.temDono()) return false; // já tem dono, não pode comprar
-        final int preco = p.getPrecoTerreno();
+        if (ativo.temDono()) return false;
+        final int preco = ativo.getPrecoCompra();
         return preco > 0 && j.getSaldo() >= preco;
     }
 
@@ -554,11 +553,10 @@ public class GameModel {
 
         final Jogador j = jogadores.get(getJogadorDaVez());
         final Casa casa = tabuleiro.getCasa(j.getPosicao());
+        final AtivoCompravel ativo = asAtivoCompravel(casa);
+        if (ativo == null) return false;
 
-        if (!(casa instanceof Propriedade)) return false;
-
-        final Propriedade p = (Propriedade) casa;
-        return p.temDono() && p.getDono() != j;
+        return ativo.temDono() && ativo.getDono() != j;
     }
 
     public boolean comprarPropriedade() {
@@ -568,19 +566,19 @@ public class GameModel {
         final Jogador jogador = jogadores.get(getJogadorDaVez());
         final Casa casaAtual = tabuleiro.getCasa(jogador.getPosicao());
 
-        if (!(casaAtual instanceof Propriedade))
+        final AtivoCompravel ativo = asAtivoCompravel(casaAtual);
+        if (ativo == null)
             return false;
-        final Propriedade prop = (Propriedade) casaAtual;
-        if (prop.temDono())
+        if (ativo.temDono())
             return false;
 
-        final int preco = prop.getPrecoTerreno();
+        final int preco = ativo.getPrecoCompra();
         if (preco <= 0 || jogador.getSaldo() < preco)
             return false;
 
         jogador.debitar(preco);
         banco.creditar(preco);
-        prop.setDono(jogador);
+        ativo.setDono(jogador);
 
         this.acabouDeComprarNestaQueda = true;
         notifyObservers();
@@ -676,22 +674,22 @@ public class GameModel {
         final int idPagador = getJogadorDaVez();
         final Jogador pagador = jogadores.get(idPagador);
         final Casa casa = tabuleiro.getCasa(pagador.getPosicao());
+        final AtivoCompravel ativo = asAtivoCompravel(casa);
 
-        if (!(casa instanceof Propriedade)) {
-            return Transacao.semEfeito("Casa atual não é propriedade", idPagador, pagador.getPosicao(), null, 0);
+        if (ativo == null) {
+            return Transacao.semEfeito("Casa atual não é propriedade/companhia", idPagador, pagador.getPosicao(), null, 0);
         }
 
-        final Propriedade prop = (Propriedade) casa;
-        if (!prop.temDono()) {
-            return Transacao.semEfeito("Propriedade sem dono", idPagador, pagador.getPosicao(), null, 0);
+        if (!ativo.temDono()) {
+            return Transacao.semEfeito("Posse sem dono", idPagador, pagador.getPosicao(), null, 0);
         }
 
-        final Jogador dono = prop.getDono();
+        final Jogador dono = ativo.getDono();
         if (dono == pagador) {
-            return Transacao.semEfeito("Propriedade do próprio jogador", idPagador, pagador.getPosicao(), dono.getId(), 0);
+            return Transacao.semEfeito("Posse do próprio jogador", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
-        final int aluguel = prop.calcularAluguelAtual();
+        final int aluguel = ativo.calcularAluguel();
         if (aluguel <= 0) {
             return Transacao.semEfeito("Aluguel calculado como zero", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
@@ -705,7 +703,7 @@ public class GameModel {
             pagador.debitar(aluguel);
             dono.creditar(aluguel);
             notifyObservers(); // atualiza UI
-            return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), aluguel);
+            return Transacao.aluguelEfetuado(idPagador, dono.getId(), ativo.getPosicao(), aluguel);
         }
 
         // pagamento parcial + falência
@@ -716,7 +714,7 @@ public class GameModel {
         }
         executarFalencia(pagador);
         notifyObservers(); // atualiza UI
-        return Transacao.aluguelEfetuado(idPagador, dono.getId(), prop.getPosicao(), disponivel);
+        return Transacao.aluguelEfetuado(idPagador, dono.getId(), ativo.getPosicao(), disponivel);
     }
 
     public Transacao aplicarEfeitosObrigatoriosPosMovimento() {
@@ -809,19 +807,19 @@ public class GameModel {
 
         final Jogador j = jogadores.get(getJogadorDaVez());
         final Casa c = tabuleiro.getCasa(posicaoPropriedade);
-        if (!(c instanceof Propriedade))
+        if (!(c instanceof AtivoCompravel))
             return false;
 
-        final Propriedade p = (Propriedade) c;
-        if (!p.temDono() || p.getDono() != j)
+        final AtivoCompravel ativo = (AtivoCompravel) c;
+        if (!ativo.temDono() || ativo.getDono() != j)
             return false;
 
-        final int valorAgregado = p.valorAgregadoAtual();
+        final int valorAgregado = Math.max(0, ativo.valorAgregadoAtual());
         final int pagamento = (valorAgregado * 9) / 10; // 90%
 
         banco.debitar(pagamento); // banco paga
         j.creditar(pagamento);
-        p.resetarParaBanco(); // sem dono e sem construções
+        ativo.resetarParaBanco();
         notifyObservers();
         return true;
     }
@@ -837,16 +835,16 @@ public class GameModel {
             return false;
 
         // Liquida do maior valor agregado para o menor
-        List<Propriedade> minhas = listarPropriedadesDo(j);
-        minhas.sort(Comparator.comparingInt(Propriedade::valorAgregadoAtual).reversed());
+        List<AtivoCompravel> minhas = listarAtivosDo(j);
+        minhas.sort(Comparator.comparingInt(AtivoCompravel::valorAgregadoAtual).reversed());
 
-        for (Propriedade p : minhas) {
+        for (AtivoCompravel ativo : minhas) {
             if (j.getSaldo() >= 0)
                 break;
-            final int pagamento = (p.valorAgregadoAtual() * 9) / 10;
+            final int pagamento = (Math.max(0, ativo.valorAgregadoAtual()) * 9) / 10;
             banco.debitar(pagamento);
             j.creditar(pagamento);
-            p.resetarParaBanco();
+            ativo.resetarParaBanco();
         }
 
         if (j.getSaldo() < 0) {
@@ -858,18 +856,22 @@ public class GameModel {
         return false;
     }
 
-    private List<Propriedade> listarPropriedadesDo(Jogador dono) {
-        List<Propriedade> props = new ArrayList<>();
+    private List<AtivoCompravel> listarAtivosDo(Jogador dono) {
+        List<AtivoCompravel> ativos = new ArrayList<>();
         for (int i = 0; i < tabuleiro.tamanho(); i++) {
             Casa c = tabuleiro.getCasa(i);
-            if (c instanceof Propriedade) {
-                Propriedade p = (Propriedade) c;
-                if (p.temDono() && p.getDono() == dono) {
-                    props.add(p);
+            if (c instanceof AtivoCompravel) {
+                AtivoCompravel ativo = (AtivoCompravel) c;
+                if (ativo.temDono() && ativo.getDono() == dono) {
+                    ativos.add(ativo);
                 }
             }
         }
-        return props;
+        return ativos;
+    }
+
+    private AtivoCompravel asAtivoCompravel(Casa casa) {
+        return (casa instanceof AtivoCompravel) ? (AtivoCompravel) casa : null;
     }
 
     // =====================================================================================
@@ -944,7 +946,7 @@ public class GameModel {
     // =============================== Banco de cartas (para UI) ===============================
 
     public static final class BancoDeCartasItem {
-        public static enum Tipo { TERRITORIO, SORTE_REVES }
+        public static enum Tipo { TERRITORIO, COMPANHIA, SORTE_REVES }
         private final Tipo tipo;
         private final String nome;              // ex.: "Av. Paulista" ou "Sorte/Revés #05"
         private final Integer numeroSorteReves; // se SORTE_REVES
@@ -970,13 +972,10 @@ public class GameModel {
         }
         Jogador dono = jogadores.get(idJogador);
         List<String> nomes = new ArrayList<>();
-        for (int i = 0; i < tabuleiro.tamanho(); i++) {
-            Casa c = tabuleiro.getCasa(i);
-            if (c instanceof Propriedade) {
-                Propriedade p = (Propriedade) c;
-                if (p.temDono() && p.getDono() == dono) {
-                    nomes.add(p.getNome());
-                }
+        for (AtivoCompravel ativo : listarAtivosDo(dono)) {
+            Casa casa = tabuleiro.getCasa(ativo.getPosicao());
+            if (casa != null) {
+                nomes.add(casa.getNome());
             }
         }
         return nomes;
@@ -1004,17 +1003,21 @@ public class GameModel {
         Jogador dono = jogadores.get(idJogador);
         List<BancoDeCartasItem> items = new ArrayList<>();
 
-        // Territórios do jogador
+        // Territórios e companhias do jogador
         for (int i = 0; i < tabuleiro.tamanho(); i++) {
             Casa c = tabuleiro.getCasa(i);
-            if (c instanceof Propriedade) {
-                Propriedade p = (Propriedade) c;
-                if (p.temDono() && p.getDono() == dono) {
+            if (c instanceof AtivoCompravel) {
+                AtivoCompravel ativo = (AtivoCompravel) c;
+                if (ativo.temDono() && ativo.getDono() == dono) {
+                    BancoDeCartasItem.Tipo tipo =
+                            (c instanceof Companhia)
+                                    ? BancoDeCartasItem.Tipo.COMPANHIA
+                                    : BancoDeCartasItem.Tipo.TERRITORIO;
                     items.add(new BancoDeCartasItem(
-                            BancoDeCartasItem.Tipo.TERRITORIO,
-                            p.getNome(),
+                            tipo,
+                            c.getNome(),
                             null,
-                            p.getPosicao()
+                            ativo.getPosicao()
                     ));
                 }
             }
@@ -1039,7 +1042,7 @@ public class GameModel {
         exigirTabuleiroCarregado();
         final Jogador j = jogadores.get(getJogadorDaVez());
         final Casa c = tabuleiro.getCasa(j.getPosicao());
-        if (c instanceof Propriedade) {
+        if (c instanceof AtivoCompravel) {
             return Optional.of(c.getNome());
         }
         return Optional.empty();
@@ -1094,6 +1097,24 @@ public class GameModel {
         for (int i = 0; i < nCasas; i++) {
             if (i == idxPropriedade) {
                 casas.add(new Propriedade(i, "Propriedade " + i, precoTerreno, precoCasa, precoHotel, new int[0]));
+            } else {
+                casas.add(new Casa(i, "Casa " + i, "GENERICA"));
+            }
+        }
+        this.setTabuleiro(new Tabuleiro(casas));
+        notifyObservers();
+    }
+
+    public void carregarTabuleiroDeTesteComUmaCompanhia(int nCasas, int idxCompanhia, int precoCompra, int aluguelFixo) {
+        if (nCasas <= 0)
+            throw new IllegalArgumentException("nCasas deve ser > 0");
+        if (idxCompanhia < 0 || idxCompanhia >= nCasas) {
+            throw new IllegalArgumentException("Índice de companhia fora do tabuleiro.");
+        }
+        List<Casa> casas = new ArrayList<>(nCasas);
+        for (int i = 0; i < nCasas; i++) {
+            if (i == idxCompanhia) {
+                casas.add(new Companhia(i, "Companhia " + i, precoCompra, aluguelFixo));
             } else {
                 casas.add(new Casa(i, "Casa " + i, "GENERICA"));
             }
@@ -1194,6 +1215,21 @@ public class GameModel {
         notifyObservers();
     }
 
+    public void debugForcarDonoDaCompanhia(int posicaoCompanhia, int idDono) {
+        exigirPartidaIniciada();
+        exigirTabuleiroCarregado();
+
+        Casa c = tabuleiro.getCasa(posicaoCompanhia);
+        if (!(c instanceof Companhia)) {
+            throw new IllegalArgumentException("Posição não é Companhia");
+        }
+        if (idDono < 0 || idDono >= jogadores.size()) {
+            throw new IllegalArgumentException("idDono inválido");
+        }
+        ((Companhia) c).setDono(jogadores.get(idDono));
+        notifyObservers();
+    }
+
     public void debugDarCartaSaidaLivreAoJogador(int idJogador, boolean possui) {
         exigirPartidaIniciada();
         if (idJogador < 0 || idJogador >= jogadores.size()) {
@@ -1267,8 +1303,8 @@ public class GameModel {
         List<ResumoCapital> lista = new ArrayList<>();
         for (Jogador j : jogadores) {
             int patrimonio = 0;
-            for (Propriedade p : listarPropriedadesDo(j)) {
-                patrimonio += Math.max(0, p.valorAgregadoAtual());
+            for (AtivoCompravel ativo : listarAtivosDo(j)) {
+                patrimonio += Math.max(0, ativo.valorAgregadoAtual());
             }
             lista.add(new ResumoCapital(j.getId(), j.getSaldo(), patrimonio, j.isAtivo()));
         }
@@ -1438,10 +1474,17 @@ public class GameModel {
         List<PropertyState> props = new ArrayList<>();
         for (int i = 0; i < tabuleiro.tamanho(); i++) {
             Casa c = tabuleiro.getCasa(i);
-            if (c instanceof Propriedade) {
-                Propriedade p = (Propriedade) c;
-                int donoId = p.temDono() ? p.getDono().getId() : -1;
-                props.add(new PropertyState(p.getPosicao(), donoId, p.getNumCasas(), p.temHotel()));
+            if (c instanceof AtivoCompravel) {
+                AtivoCompravel ativo = (AtivoCompravel) c;
+                int donoId = ativo.temDono() ? ativo.getDono().getId() : -1;
+                int numCasas = 0;
+                boolean hotel = false;
+                if (c instanceof Propriedade) {
+                    Propriedade p = (Propriedade) c;
+                    numCasas = p.getNumCasas();
+                    hotel = p.temHotel();
+                }
+                props.add(new PropertyState(ativo.getPosicao(), donoId, numCasas, hotel));
             }
         }
 
@@ -1523,29 +1566,32 @@ public class GameModel {
         }
         for (int i = 0; i < tabuleiro.tamanho(); i++) {
             Casa c = tabuleiro.getCasa(i);
-            if (c instanceof Propriedade) {
-                ((Propriedade) c).resetarParaBanco();
+            if (c instanceof AtivoCompravel) {
+                ((AtivoCompravel) c).resetarParaBanco();
             }
         }
         for (PropertyState ps : state.getPropriedades()) {
             Casa c = tabuleiro.getCasa(ps.getPosicao());
-            if (!(c instanceof Propriedade)) {
+            if (!(c instanceof AtivoCompravel)) {
                 continue;
             }
-            Propriedade prop = (Propriedade) c;
+            AtivoCompravel ativo = (AtivoCompravel) c;
             if (ps.getDonoId() >= 0 && ps.getDonoId() < jogadores.size()) {
-                prop.setDono(jogadores.get(ps.getDonoId()));
-                for (int i = 0; i < ps.getNumCasas(); i++) {
-                    if (!prop.podeConstruirCasa()) {
-                        break;
+                ativo.setDono(jogadores.get(ps.getDonoId()));
+                if (c instanceof Propriedade) {
+                    Propriedade prop = (Propriedade) c;
+                    for (int i = 0; i < ps.getNumCasas(); i++) {
+                        if (!prop.podeConstruirCasa()) {
+                            break;
+                        }
+                        prop.construirCasa();
                     }
-                    prop.construirCasa();
-                }
-                if (ps.hasHotel() && prop.podeConstruirHotel()) {
-                    prop.construirHotel();
+                    if (ps.hasHotel() && prop.podeConstruirHotel()) {
+                        prop.construirHotel();
+                    }
                 }
             } else {
-                prop.setDono(null);
+                ativo.setDono(null);
             }
         }
 
@@ -1670,22 +1716,22 @@ public class GameModel {
     private void tentarLevantarFundosPara(Jogador j, int valorNecessario) {
         if (j.getSaldo() >= valorNecessario)
             return;
-        List<Propriedade> minhas = listarPropriedadesDo(j);
-        minhas.sort(Comparator.comparingInt(Propriedade::valorAgregadoAtual).reversed());
-        for (Propriedade p : minhas) {
+        List<AtivoCompravel> minhas = listarAtivosDo(j);
+        minhas.sort(Comparator.comparingInt(AtivoCompravel::valorAgregadoAtual).reversed());
+        for (AtivoCompravel ativo : minhas) {
             if (j.getSaldo() >= valorNecessario)
                 break;
-            final int pagamento = (p.valorAgregadoAtual() * 9) / 10; // 90%
+            final int pagamento = (Math.max(0, ativo.valorAgregadoAtual()) * 9) / 10; // 90%
             banco.debitar(pagamento);
             j.creditar(pagamento);
-            p.resetarParaBanco();
+            ativo.resetarParaBanco();
         }
         notifyObservers();
     }
 
     private void executarFalencia(Jogador j) {
-        for (Propriedade p : listarPropriedadesDo(j)) {
-            p.resetarParaBanco();
+        for (AtivoCompravel ativo : listarAtivosDo(j)) {
+            ativo.resetarParaBanco();
         }
         j.falir();
         cartasSRPorJogador.remove(j.getId());

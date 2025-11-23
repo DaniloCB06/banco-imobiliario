@@ -592,7 +592,7 @@ public final class AppController implements GameModel.Observer {
         if (arquivo == null) arquivo = nomeCasa + ".png";
 
         // classpath
-        String[] basesClasspath = { "/assets/territorios/" };
+        String[] basesClasspath = { "/assets/territorios/", "/assets/companhias/" };
         for (String base : basesClasspath) {
             java.io.InputStream is = null;
             try {
@@ -608,7 +608,7 @@ public final class AppController implements GameModel.Observer {
         }
 
         // filesystem
-        String[] subdirs = { "assets/territorios" };
+        String[] subdirs = { "assets/territorios", "assets/companhias" };
         for (java.io.File root : possibleRoots()) {
             for (String sub : subdirs) {
                 java.io.File dir = new java.io.File(root, sub);
@@ -660,6 +660,19 @@ public final class AppController implements GameModel.Observer {
         m.put("leblon",                         "Leblon.png");
         m.put("morumbi",                        "Morumbi.png");
         m.put("rua augusta",                    "Rua Augusta.png");
+
+        // companhias (cartas em assets/companhias)
+        m.put("companhia de trem",              "company1.png");
+        m.put("companhia de ônibus",           "company2.png");
+        m.put("companhia de onibus",           "company2.png");
+        m.put("companhia de táxi",             "company3.png");
+        m.put("companhia de taxi",             "company3.png");
+        m.put("companhia marítima",            "company4.png");
+        m.put("companhia maritima",            "company4.png");
+        m.put("companhia aérea",               "company5.png");
+        m.put("companhia aerea",               "company5.png");
+        m.put("companhia de serviços",         "company6.png");
+        m.put("companhia de servicos",         "company6.png");
 
         // mapeamentos tolerantes para a Faria Lima (arquivo que você tem)
         m.put("av. brig. faria lima",           "Av. Brigadero Faria Lima.png");
