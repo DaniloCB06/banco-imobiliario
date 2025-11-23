@@ -49,6 +49,10 @@ public class GameModel {
     // Sinalização de 3ª dupla consecutiva
     private boolean deveIrParaPrisaoPorTerceiraDupla = false;
 
+    // Fluxo automático ao consumir carta de saída livre da prisão
+    private boolean autoLancamentoAposSaidaPrisao = false;
+    private boolean executandoAutoLancamento = false;
+
     /** DTO imutável para resultado dos dados. */
     public static final class ResultadoDados {
         private final int d1, d2;
@@ -325,6 +329,8 @@ public class GameModel {
         this.ultimoD1 = this.ultimoD2 = null;
         this.jaLancouNesteTurno = false;
         this.deveIrParaPrisaoPorTerceiraDupla = false;
+        this.autoLancamentoAposSaidaPrisao = false;
+        this.executandoAutoLancamento = false;
         this.ultimaCartaSR = Optional.empty();
         this.srRecemSacada = Optional.empty();
         limparContextoDeQueda();
@@ -437,13 +443,14 @@ public class GameModel {
 
     public int getJogadorDaVez() {
         exigirPartidaIniciada();
+        garantirJogadorDaVezAtivo();
         return turno.getJogadorDaVez();
     }
 
     /** Encerrar vez manualmente (UI chama este método). */
     public void encerrarVez() {
         exigirPartidaIniciada();
-        turno.passarVez();
+        passarVezPulandoFalidos();
         limparContextoDeQueda();
         this.jaLancouNesteTurno = false;
         this.ultimoD1 = null;
@@ -455,6 +462,35 @@ public class GameModel {
     /** Mantido por compatibilidade com versões antigas da UI. */
     public void encerrarAcoesDaVezEPassarTurno() {
         encerrarVez();
+    }
+
+    private void passarVezPulandoFalidos() {
+        if (jogadores.isEmpty()) {
+            turno.passarVez();
+            return;
+        }
+        int total = jogadores.size();
+        for (int i = 0; i < total; i++) {
+            turno.passarVez();
+            Jogador candidato = jogadores.get(turno.getJogadorDaVez());
+            if (candidato != null && candidato.isAtivo()) {
+                return;
+            }
+        }
+    }
+
+    private void garantirJogadorDaVezAtivo() {
+        if (jogadores.isEmpty()) {
+            return;
+        }
+        int total = jogadores.size();
+        for (int i = 0; i < total; i++) {
+            Jogador candidato = jogadores.get(turno.getJogadorDaVez());
+            if (candidato != null && candidato.isAtivo()) {
+                return;
+            }
+            turno.passarVez();
+        }
     }
 
     // =====================================================================================
@@ -729,7 +765,9 @@ public class GameModel {
 
     public Transacao deslocarPiaoEAplicarObrigatorios() {
         deslocarPiao();
-        return aplicarEfeitosObrigatoriosPosMovimento();
+        Transacao resultado = aplicarEfeitosObrigatoriosPosMovimento();
+        processarLancamentosAutomaticosSeNecessario();
+        return resultado;
     }
 
     // =====================================================================================
@@ -745,8 +783,44 @@ public class GameModel {
         final int idxPrisao = getIndicePrisaoOrThrow();
         final Jogador j = jogadores.get(idJogador);
         j.moverPara(idxPrisao);
-        j.setNaPrisao(true);
+        if (j.temCartaSaidaLivre()) {
+            ativarSaidaAutomaticaDaPrisao(j);
+        } else {
+            j.setNaPrisao(true);
+        }
         turno.resetarDuplas();
+    }
+
+    private void ativarSaidaAutomaticaDaPrisao(Jogador jogador) {
+        if (jogador == null) {
+            return;
+        }
+        jogador.setCartaSaidaLivre(false);
+        removerCartaSorteRevesDoJogador(jogador.getId(), 9);
+        jogador.setNaPrisao(false);
+        this.jaLancouNesteTurno = false;
+        this.ultimoD1 = null;
+        this.ultimoD2 = null;
+        this.autoLancamentoAposSaidaPrisao = true;
+    }
+
+    private void processarLancamentosAutomaticosSeNecessario() {
+        if (executandoAutoLancamento) {
+            return;
+        }
+        while (autoLancamentoAposSaidaPrisao) {
+            autoLancamentoAposSaidaPrisao = false;
+            executandoAutoLancamento = true;
+            try {
+                this.jaLancouNesteTurno = false;
+                this.ultimoD1 = null;
+                this.ultimoD2 = null;
+                lancarDados();
+                deslocarPiaoEAplicarObrigatorios();
+            } finally {
+                executandoAutoLancamento = false;
+            }
+        }
     }
 
     public boolean tentarSairDaPrisaoComDuplaOuCarta() {
@@ -769,24 +843,6 @@ public class GameModel {
             return true;
         }
         return false;
-    }
-
-    public boolean usarCartaSaidaLivre() {
-        exigirPartidaIniciada();
-        exigirTabuleiroCarregado();
-        final Jogador j = jogadores.get(getJogadorDaVez());
-        if (!j.isNaPrisao() || !j.temCartaSaidaLivre())
-            return false;
-
-        j.setCartaSaidaLivre(false);
-        removerCartaSorteRevesDoJogador(j.getId(), 9);
-        j.setNaPrisao(false);
-        turno.resetarDuplas();
-        this.jaLancouNesteTurno = false;
-        this.ultimoD1 = null;
-        this.ultimoD2 = null;
-        notifyObservers();
-        return true;
     }
 
     public boolean estaNaPrisao(int idJogador) {
@@ -1607,6 +1663,14 @@ public class GameModel {
             cartasSRPorJogador.get(id).addAll(entry.getValue());
         }
 
+        for (Jogador jogador : jogadores) {
+            if (jogador != null && jogador.temCartaSaidaLivre()) {
+                cartasSRPorJogador
+                        .computeIfAbsent(jogador.getId(), k -> new HashSet<>())
+                        .add(9);
+            }
+        }
+
         this.tamanhoBaralhoSR = state.getTamanhoBaralhoSR() <= 0 ? SorteRevesCards.total() : state.getTamanhoBaralhoSR();
         int modulo = Math.max(1, this.tamanhoBaralhoSR);
         int ponteiro = state.getPonteiroBaralhoSR();
@@ -1638,6 +1702,9 @@ public class GameModel {
 
         this.partidaEncerrada = false;
         this.resultadoPartida = null;
+        this.autoLancamentoAposSaidaPrisao = false;
+        this.executandoAutoLancamento = false;
+        garantirJogadorDaVezAtivo();
         notifyObservers();
     }
 

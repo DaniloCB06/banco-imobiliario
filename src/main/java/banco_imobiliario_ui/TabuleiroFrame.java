@@ -35,7 +35,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
     private final javax.swing.JButton btnEncerrarVez     = new javax.swing.JButton("Encerrar vez");
     private final javax.swing.JButton btnJogar           = new javax.swing.JButton("Jogar");
     private final javax.swing.JButton btnBancoCartas     = new javax.swing.JButton("Abrir banco de cartas");
-    private final javax.swing.JButton btnUsarCartaPrisao = new javax.swing.JButton("Usar carta de prisão");
     private final javax.swing.JButton btnSalvarPartida   = new javax.swing.JButton("Salvar partida");
     private final javax.swing.JButton btnCarregarPartida = new javax.swing.JButton("Carregar partida");
     private final javax.swing.JButton btnEncerrarPartida = new javax.swing.JButton("Encerrar partida");
@@ -87,10 +86,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         // Botão "Abrir banco de cartas" — visível ao lado dos demais
         btnBancoCartas.setEnabled(false);
         btnBancoCartas.addActionListener(e -> abrirBancoDeCartas());
-
-        btnUsarCartaPrisao.setEnabled(false);
-        btnUsarCartaPrisao.setToolTipText("Use a carta de saída livre da prisão quando estiver preso.");
-        btnUsarCartaPrisao.addActionListener(e -> usarCartaSaidaLivre());
 
         btnSalvarPartida.addActionListener(e -> controller.solicitarSalvarPartida(this));
         btnCarregarPartida.addActionListener(e -> controller.solicitarCarregarPartida(this));
@@ -175,8 +170,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.Y_AXIS));
         actions.add(btnJogar);
         actions.add(javax.swing.Box.createVerticalStrut(6));
-        actions.add(btnUsarCartaPrisao);
-        actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnEncerrarVez);
         actions.add(javax.swing.Box.createVerticalStrut(6));
         actions.add(btnBancoCartas);        // <-- botão inserido
@@ -227,18 +220,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
         } catch (RuntimeException ex) {
             controller.exibirErro(ex.getMessage());
             // Em caso de erro, não reabilitamos aqui; o update() ajusta conforme o estado real.
-        }
-    }
-
-    private void usarCartaSaidaLivre() {
-        banco_imobiliario_models.GameModel model = controller.getModel();
-        try {
-            boolean ok = model.usarCartaSaidaLivre();
-            if (!ok) {
-                controller.exibirErro("Não é possível usar a carta agora.");
-            }
-        } catch (RuntimeException ex) {
-            controller.exibirErro(ex.getMessage());
         }
     }
 
@@ -767,12 +748,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
             } catch (Throwable ignore) {}
             btnEncerrarVez.setEnabled(!partidaEncerrada && !saiuDupla);
 
-            boolean podeUsarCartaPrisao = false;
-            try {
-                podeUsarCartaPrisao = m.isJogadorDaVezNaPrisao() && m.jogadorDaVezTemCartaSaidaLivre();
-            } catch (Throwable ignore) {}
-            btnUsarCartaPrisao.setEnabled(!partidaEncerrada && podeUsarCartaPrisao);
-
             // Popup de Sorte/Revés (one-shot)
             try {
                 java.lang.reflect.Method meth = m.getClass().getMethod("consumirSorteRevesRecemSacada");
@@ -830,7 +805,6 @@ public final class TabuleiroFrame extends javax.swing.JFrame
 
             if (partidaEncerrada) {
                 btnEncerrarVez.setEnabled(false);
-                btnUsarCartaPrisao.setEnabled(false);
                 btnBancoCartas.setEnabled(false);
                 btnCartaTerritorio.setEnabled(false);
             }
