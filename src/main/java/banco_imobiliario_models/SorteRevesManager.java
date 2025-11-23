@@ -2,19 +2,13 @@ package banco_imobiliario_models;
 
 import java.util.*;
 
-/**
- * Gerencia o baralho de Sorte/Revés e o "banco de cartas" por jogador.
- * - Unicidade global: uma carta sorteada sai do baralho e não reaparece.
- * - Banco por jogador: guarda os IDs possuídos.
- * Pensado para, no futuro, também acomodar cartas de território.
- */
 public final class SorteRevesManager {
 
-    // Catálogo completo (id -> carta)
+    
     private final Map<Integer, SorteRevesCard> catalogo = new HashMap<>();
-    // Conjunto de IDs ainda disponíveis para sorteio
+    
     private final Set<Integer> disponiveis = new HashSet<>();
-    // Banco por jogador: playerId -> conjunto de IDs
+    
     private final Map<Integer, Set<Integer>> bancoPorJogador = new HashMap<>();
 
     private Integer ultimaCartaId = null;
@@ -28,7 +22,7 @@ public final class SorteRevesManager {
         ultimaCartaId = null;
     }
 
-    /** Atalho: cria automaticamente o catálogo 1..N com textos genéricos. */
+    
     public void resetarSequenciaPadrao(int total) {
         List<SorteRevesCard> list = new ArrayList<>(total);
         for (int i = 1; i <= total; i++) {
@@ -37,10 +31,10 @@ public final class SorteRevesManager {
         resetarComCatalogo(list);
     }
 
-    /** Sorteia aleatoriamente uma carta disponível e a move para o banco do jogador. */
+    
     public Optional<SorteRevesCard> sortearParaJogador(int jogadorId, Random rng) {
         if (disponiveis.isEmpty()) return Optional.empty();
-        // escolher um ID aleatório do set
+        
         int idx = rng.nextInt(disponiveis.size());
         int chosen = -1;
         int i = 0;

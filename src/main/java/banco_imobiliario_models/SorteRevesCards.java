@@ -6,10 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Catalogo central das cartas de Sorte/Reves.
- * Mantem metadados (titulo, descricao) e o tipo de efeito associado.
- */
 final class SorteRevesCards {
 
     private SorteRevesCards() {}

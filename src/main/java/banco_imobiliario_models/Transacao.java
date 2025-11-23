@@ -1,18 +1,14 @@
 package banco_imobiliario_models;
 
-/**
- * DTO simples para relatar efeitos financeiros de uma ação (ex.: aluguel).
- * É público para que os testes (em outro pacote) possam inspecionar o resultado.
- */
 public class Transacao {
 
-    private final String tipo;              // "ALUGUEL", "IMPOSTO", "LUCRO" ou "SEM_EFEITO"
-    private final boolean efetuada;         // true se houve débito/crédito
-    private final int pagadorId;            // id do jogador da vez (quando aplicável)
-    private final Integer recebedorId;      // id do dono, quando aplicável
-    private final int posicaoPropriedade;   // posição da casa no tabuleiro
-    private final int valor;                // valor envolvido (0 em SEM_EFEITO)
-    private final String motivo;            // detalhe para SEM_EFEITO
+    private final String tipo;              
+    private final boolean efetuada;         
+    private final int pagadorId;            
+    private final Integer recebedorId;      
+    private final int posicaoPropriedade;   
+    private final int valor;                
+    private final String motivo;            
 
     private Transacao(String tipo, boolean efetuada, int pagadorId,
                       Integer recebedorId, int posicaoPropriedade, int valor, String motivo) {
@@ -29,14 +25,14 @@ public class Transacao {
         return new Transacao("ALUGUEL", true, pagadorId, recebedorId, posicaoProp, valor, null);
     }
 
-    // NOVO: imposto pago ao banco
+    
     public static Transacao impostoPago(int pagadorId, int posicao, int valor) {
         return new Transacao("IMPOSTO", true, pagadorId, null, posicao, valor, null);
     }
 
-    // NOVO: lucro recebido do banco
+    
     public static Transacao lucroRecebido(int recebedorId, int posicao, int valor) {
-        // por consistência, 'pagadorId' continua sendo o jogador da vez
+        
         return new Transacao("LUCRO", true, recebedorId, null, posicao, valor, null);
     }
 

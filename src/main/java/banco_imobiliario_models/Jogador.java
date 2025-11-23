@@ -3,14 +3,12 @@ package banco_imobiliario_models;
 final class Jogador {
     private final int id;
     private int saldo;
-    private int posicao; // 0 = inicio
+    private int posicao;
 
-    // PRISÃO
     private boolean naPrisao = false;
     private boolean cartaSaidaLivre = false;
 
-    // Estado de participação no jogo
-    private boolean ativo = true; // ao falir -> false
+    private boolean ativo = true;
 
     Jogador(int id, int saldoInicial) {
         this.id = id;
@@ -18,29 +16,57 @@ final class Jogador {
         this.posicao = 0;
     }
 
-    int getId() { return id; }
-    int getSaldo() { return saldo; }
-    int getPosicao() { return posicao; }
+    int getId() {
+        return id;
+    }
 
-    boolean isAtivo() { return ativo; }
-    void falir() { this.ativo = false; this.naPrisao = false; this.cartaSaidaLivre = false; }
+    int getSaldo() {
+        return saldo;
+    }
+
+    int getPosicao() {
+        return posicao;
+    }
+
+    boolean isAtivo() {
+        return ativo;
+    }
+
+    void falir() {
+        this.ativo = false;
+        this.naPrisao = false;
+        this.cartaSaidaLivre = false;
+    }
 
     void creditar(int valor) {
-        if (valor < 0) throw new IllegalArgumentException("valor < 0");
+        if (valor < 0)
+            throw new IllegalArgumentException("valor < 0");
         saldo += valor;
     }
 
     void debitar(int valor) {
-        if (valor < 0) throw new IllegalArgumentException("valor < 0");
-        saldo -= valor; // saldo pode ficar negativo; Regra #7 resolve
+        if (valor < 0)
+            throw new IllegalArgumentException("valor < 0");
+        saldo -= valor;
     }
 
-    void moverPara(int novaPosicao) { this.posicao = novaPosicao; }
+    void moverPara(int novaPosicao) {
+        this.posicao = novaPosicao;
+    }
 
-    // ----- Prisão -----
-    boolean isNaPrisao() { return naPrisao; }
-    void setNaPrisao(boolean v) { this.naPrisao = v; }
+    boolean isNaPrisao() {
+        return naPrisao;
+    }
 
-    boolean temCartaSaidaLivre() { return cartaSaidaLivre; }
-    void setCartaSaidaLivre(boolean v) { this.cartaSaidaLivre = v; }
+    void setNaPrisao(boolean v) {
+        this.naPrisao = v;
+    }
+
+    boolean temCartaSaidaLivre() {
+        return cartaSaidaLivre;
+    }
+
+    void setCartaSaidaLivre(boolean v) {
+        this.cartaSaidaLivre = v;
+    }
 }

@@ -12,17 +12,7 @@ import java.util.HashMap;
 import java.text.Normalizer;
 import java.util.Locale;
 
-/**
- * API pública do Model (Iteração 1 + Sorte/Revés).
- *
- * Regras cobertas: #1, #2, #3, #4, #5, #6, #7.
- * Extensão: Sorte/Revés (baralho simples interno + banco por jogador).
- */
 public class GameModel {
-
-    // =====================================================================================
-    // ESTADO GLOBAL
-    // =====================================================================================
 
     private RandomProvider rng;
     private final Dado dado1 = new Dado();
@@ -35,25 +25,24 @@ public class GameModel {
     private boolean partidaEncerrada = false;
     private ResultadoPartida resultadoPartida = null;
 
-    // Lançamento corrente
+    
     private Integer ultimoD1 = null, ultimoD2 = null;
 
-    // Controle: só uma rolagem por turno (liberado novamente se sair DUPLA válida)
+    
     private boolean jaLancouNesteTurno = false;
 
-    // Contexto da queda (para permitir construir na casa em que caiu)
+    
     private Integer posicaoDaQuedaAtual = null;
     private boolean jaConstruiuNestaQueda = false;
     private boolean acabouDeComprarNestaQueda = false;
 
-    // Sinalização de 3ª dupla consecutiva
+    
     private boolean deveIrParaPrisaoPorTerceiraDupla = false;
 
-    // Fluxo automático ao consumir carta de saída livre da prisão
+    
     private boolean autoLancamentoAposSaidaPrisao = false;
     private boolean executandoAutoLancamento = false;
 
-    /** DTO imutável para resultado dos dados. */
     public static final class ResultadoDados {
         private final int d1, d2;
         public ResultadoDados(int d1, int d2) { this.d1 = d1; this.d2 = d2; }
@@ -63,17 +52,16 @@ public class GameModel {
         public boolean isDupla() { return d1 == d2; }
     }
 
-    // =====================================================================================
-    // SORTE/REVÉS — IMPLEMENTAÇÃO INTERNA (sem dependências externas)
-    // =====================================================================================
+    
+    
+    
 
-    /** Cartinha simples apenas com número e rótulo (imagem opcional). */
     public static final class SorteRevesCard {
         private final int numero;
-        private final String rotulo;       // ex.: "Sorte/Revés #05"
+        private final String rotulo;
         private final String titulo;
         private final String descricao;
-        private final String imagemArquivo; // opcional (pode ser null)
+        private final String imagemArquivo; 
         public SorteRevesCard(int numero, String titulo, String descricao) {
             this.numero = numero;
             this.rotulo = String.format(Locale.ROOT, "Sorte/Revés #%02d", numero);
@@ -88,18 +76,18 @@ public class GameModel {
         public String getImagemArquivo() { return imagemArquivo; }
     }
 
-    /** Tamanho do baralho e posição do próximo sorteio (circular). */
+    
     private int tamanhoBaralhoSR = 30;
     private int ponteiroBaralhoSR = 0;
 
-    /** Armazena as cartas (números) que cada jogador possui. */
+    
     private final Map<Integer, Set<Integer>> cartasSRPorJogador = new HashMap<>();
 
-    /** Última carta sorteada (para consultas) e buffer one-shot para a UI. */
+    
     private Optional<SorteRevesCard> ultimaCartaSR = Optional.empty();
     private Optional<SorteRevesCard> srRecemSacada = Optional.empty();
 
-    /** Configura um baralho padrão com N cartas genéricas numeradas 1..N. */
+    
     public void configurarBaralhoSorteRevesPadrao(int totalCartas) {
         int limite = SorteRevesCards.total();
         if (totalCartas <= 0 || totalCartas > limite) {
@@ -109,12 +97,12 @@ public class GameModel {
         this.ponteiroBaralhoSR = 0;
     }
 
-    /** Última carta sorteada (consulta simples, não consome). */
+    
     public Optional<SorteRevesCard> getUltimaCartaSorteReves() {
         return ultimaCartaSR;
     }
 
-    /** Recupera metadados da carta informada (sempre via GameModel). */
+    
     public Optional<SorteRevesCard> getCartaSorteRevesPorNumero(int numero) {
         if (numero < 1 || numero > SorteRevesCards.total()) {
             return Optional.empty();
@@ -126,20 +114,20 @@ public class GameModel {
         return Optional.of(new SorteRevesCard(numero, def.getTitulo(), def.getDescricao()));
     }
 
-    /** Banco de cartas do jogador (IDs das cartas em posse). */
+    
     public Set<Integer> getCartasSorteRevesDoJogador(int jogadorId) {
         Set<Integer> cartas = cartasSRPorJogador.get(jogadorId);
         return cartas == null ? Collections.emptySet() : Collections.unmodifiableSet(cartas);
     }
 
-    /** Consumido pela UI para mostrar a imagem/rotulo 1x só após o sorteio. */
+    
     public Optional<SorteRevesCard> consumirSorteRevesRecemSacada() {
         Optional<SorteRevesCard> out = srRecemSacada;
         srRecemSacada = Optional.empty();
         return out;
     }
 
-    /** Sorteia e entrega uma carta simples ao jogador. */
+    
     private SorteRevesCard sortearCartaParaJogador(int jogadorId) {
         if (tamanhoBaralhoSR <= 0) {
             tamanhoBaralhoSR = SorteRevesCards.total();
@@ -282,7 +270,7 @@ public class GameModel {
         }
     }
 
-    /** Heurística para identificar casa do tipo Sorte/Revés (ajuste se necessário). */
+    
     private boolean isCasaSorteReves(Casa c) {
         if (c == null) return false;
         String tipo = c.getTipo() == null ? "" : c.getTipo();
@@ -307,9 +295,9 @@ public class GameModel {
         return n.toUpperCase(Locale.ROOT);
     }
 
-    // =====================================================================================
-    // SETUP
-    // =====================================================================================
+    
+    
+    
 
     public void novaPartida(int numJogadores, Long seedOpcional) {
         if (numJogadores < 2 || numJogadores > 6) {
@@ -387,9 +375,9 @@ public class GameModel {
         }
     }
 
-    // =====================================================================================
-    // REGRA #1 — LANÇAR DADOS (apenas 1x por turno; libera se DUPLA válida)
-    // =====================================================================================
+    
+    
+    
 
     public ResultadoDados lancarDados() {
         exigirPartidaIniciada();
@@ -403,7 +391,6 @@ public class GameModel {
         this.ultimoD1 = d1;
         this.ultimoD2 = d2;
         this.jaLancouNesteTurno = true;
-
         if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
             this.deveIrParaPrisaoPorTerceiraDupla = true;
         }
@@ -411,7 +398,7 @@ public class GameModel {
         return new ResultadoDados(d1, d2);
     }
 
-    /** Para testes – força os valores dos dados (1..6) sem random. */
+    
     public ResultadoDados lancarDadosForcado(int d1, int d2) {
         exigirPartidaIniciada();
         if (jaLancouNesteTurno) {
@@ -425,7 +412,6 @@ public class GameModel {
         this.ultimoD1 = d1;
         this.ultimoD2 = d2;
         this.jaLancouNesteTurno = true;
-
         if (turno.houveDupla() && turno.getDuplasConsecutivas() >= 3) {
             this.deveIrParaPrisaoPorTerceiraDupla = true;
         }
@@ -435,8 +421,8 @@ public class GameModel {
 
     public boolean houveDuplaNoUltimoLancamento() {
         exigirPartidaIniciada();
-        // Se o jogador da vez está preso, não consideramos a rolagem como "dupla" para fins de UI
-        // (isso permite encerrar a vez e o jogo não fica travado).
+        
+        
         boolean preso = jogadores.get(getJogadorDaVez()).isNaPrisao();
         return !preso && turno.houveDupla();
     }
@@ -453,7 +439,7 @@ public class GameModel {
         return turno.getJogadorDaVez();
     }
 
-    /** Encerrar vez manualmente (UI chama este método). */
+    
     public void encerrarVez() {
         exigirPartidaIniciada();
         passarVezPulandoFalidos();
@@ -465,7 +451,7 @@ public class GameModel {
         notifyObservers();
     }
 
-    /** Mantido por compatibilidade com versões antigas da UI. */
+    
     public void encerrarAcoesDaVezEPassarTurno() {
         encerrarVez();
     }
@@ -499,9 +485,9 @@ public class GameModel {
         }
     }
 
-    // =====================================================================================
-    // REGRA #2 — DESLOCAMENTO (+ PRISÃO)
-    // =====================================================================================
+    
+    
+    
 
     public ResultadoMovimento deslocarPiao() {
         exigirPartidaIniciada();
@@ -513,7 +499,7 @@ public class GameModel {
         final int id = getJogadorDaVez();
         final Jogador j = jogadores.get(id);
 
-        // Terceira dupla: vai para a prisão imediatamente
+        
         if (deveIrParaPrisaoPorTerceiraDupla) {
             int posAnt = j.getPosicao();
             enviarParaPrisao(id);
@@ -524,7 +510,7 @@ public class GameModel {
             return new ResultadoMovimento(id, posAnt, 0, j.getPosicao(), false);
         }
 
-        // Se está preso, tenta sair com dupla ou carta
+        
         if (j.isNaPrisao()) {
             boolean saiu = tentarSairDaPrisaoComDuplaOuCarta();
             if (!saiu) {
@@ -534,7 +520,7 @@ public class GameModel {
             }
         }
 
-        // Movimento regular
+        
         ResultadoMovimento r = Movimento.executar(j, ultimoD1, ultimoD2, tabuleiro);
 
         if (r.passouOuCaiuNoInicio) {
@@ -544,7 +530,7 @@ public class GameModel {
 
         iniciarContextoDeQueda(j.getPosicao());
 
-        // Casa "Vá para a Prisão"
+        
         Casa casaAtual = tabuleiro.getCasa(j.getPosicao());
         if ("VA_PARA_PRISAO".equalsIgnoreCase(casaAtual.getTipo())) {
             int posAnt = j.getPosicao();
@@ -554,13 +540,13 @@ public class GameModel {
             return new ResultadoMovimento(id, posAnt, 0, j.getPosicao(), false);
         }
 
-        // SORTE/REVÉS: sorteia ao cair
+        
         if (isCasaSorteReves(casaAtual)) {
-            sortearCartaParaJogador(id); // preenche ultimaCartaSR + srRecemSacada e adiciona ao "banco"
+            sortearCartaParaJogador(id); 
             notifyObservers();
         }
 
-        // Se houve DUPLA e o jogador não está preso, libera nova rolagem neste turno
+        
         if (turno.houveDupla() && !jogadores.get(getJogadorDaVez()).isNaPrisao()) {
             this.jaLancouNesteTurno = false;
         }
@@ -569,11 +555,11 @@ public class GameModel {
         return r;
     }
 
-    // =====================================================================================
-    // REGRA #3 — COMPRAR PROPRIEDADE
-    // =====================================================================================
+    
+    
+    
 
-    /** Habilita/desabilita o botão "Comprar" (UI) */
+    
     public boolean canComprarPropriedadeNaCasaAtual() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -588,7 +574,7 @@ public class GameModel {
         return preco > 0 && j.getSaldo() >= preco;
     }
 
-    /** Evita abrir carta quando casa tem dono (e não é o jogador atual). */
+    
     public boolean isCasaAtualPropriedadeComDonoDeOutro() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -627,9 +613,9 @@ public class GameModel {
         return true;
     }
 
-    // =====================================================================================
-    // REGRA #4 — CONSTRUÇÕES (CASA / HOTEL)
-    // =====================================================================================
+    
+    
+    
 
     public boolean canConstruirCasaNaCasaAtual() {
         exigirPartidaIniciada();
@@ -644,8 +630,8 @@ public class GameModel {
 
         final Propriedade prop = (Propriedade) casa;
         if (!prop.temDono() || prop.getDono() != jogador) return false;
-        if (acabouDeComprarNestaQueda) return false;   // não na mesma queda da compra
-        if (jaConstruiuNestaQueda) return false;       // 1 construção por queda
+        if (acabouDeComprarNestaQueda) return false;   
+        if (jaConstruiuNestaQueda) return false;       
         if (!prop.podeConstruirCasa()) return false;
 
         final int preco = prop.getPrecoCasa();
@@ -705,9 +691,9 @@ public class GameModel {
         return true;
     }
 
-    // =====================================================================================
-    // REGRA #5 — ALUGUEL
-    // =====================================================================================
+    
+    
+    
 
     public Transacao pagarAluguelSeDevido() {
         exigirPartidaIniciada();
@@ -736,7 +722,7 @@ public class GameModel {
             return Transacao.semEfeito("Aluguel calculado como zero", idPagador, pagador.getPosicao(), dono.getId(), 0);
         }
 
-        // tentar levantar fundos
+        
         if (pagador.getSaldo() < aluguel) {
             tentarLevantarFundosPara(pagador, aluguel);
         }
@@ -744,28 +730,28 @@ public class GameModel {
         if (pagador.getSaldo() >= aluguel) {
             pagador.debitar(aluguel);
             dono.creditar(aluguel);
-            notifyObservers(); // atualiza UI
+            notifyObservers(); 
             return Transacao.aluguelEfetuado(idPagador, dono.getId(), ativo.getPosicao(), aluguel);
         }
 
-        // pagamento parcial + falência
+        
         int disponivel = Math.max(0, pagador.getSaldo());
         if (disponivel > 0) {
             pagador.debitar(disponivel);
             dono.creditar(disponivel);
         }
         executarFalencia(pagador);
-        notifyObservers(); // atualiza UI
+        notifyObservers(); 
         return Transacao.aluguelEfetuado(idPagador, dono.getId(), ativo.getPosicao(), disponivel);
     }
 
     public Transacao aplicarEfeitosObrigatoriosPosMovimento() {
-        // IMPOSTO/LUCRO primeiro
+        
         Transacao t = aplicarCasaEspecialSeDevida();
         if (t != null && !"SEM_EFEITO".equals(t.getTipo())) {
             return t;
         }
-        // depois aluguel
+        
         return pagarAluguelSeDevido();
     }
 
@@ -776,9 +762,9 @@ public class GameModel {
         return resultado;
     }
 
-    // =====================================================================================
-    // REGRA #6 — PRISÃO
-    // =====================================================================================
+    
+    
+    
 
     public void enviarParaPrisao(int idJogador) {
         exigirPartidaIniciada();
@@ -859,9 +845,9 @@ public class GameModel {
         return jogadores.get(idJogador).isNaPrisao();
     }
 
-    // =====================================================================================
-    // REGRA #7 — LIQUIDAÇÃO E FALÊNCIA
-    // =====================================================================================
+    
+    
+    
 
     public boolean venderPropriedadeAoBanco(int posicaoPropriedade) {
         exigirPartidaIniciada();
@@ -877,9 +863,9 @@ public class GameModel {
             return false;
 
         final int valorAgregado = Math.max(0, ativo.valorAgregadoAtual());
-        final int pagamento = (valorAgregado * 9) / 10; // 90%
+        final int pagamento = (valorAgregado * 9) / 10; 
 
-        banco.debitar(pagamento); // banco paga
+        banco.debitar(pagamento); 
         j.creditar(pagamento);
         ativo.resetarParaBanco();
         notifyObservers();
@@ -896,7 +882,7 @@ public class GameModel {
         if (j.getSaldo() >= 0)
             return false;
 
-        // Liquida do maior valor agregado para o menor
+        
         List<AtivoCompravel> minhas = listarAtivosDo(j);
         minhas.sort(Comparator.comparingInt(AtivoCompravel::valorAgregadoAtual).reversed());
 
@@ -936,9 +922,9 @@ public class GameModel {
         return (casa instanceof AtivoCompravel) ? (AtivoCompravel) casa : null;
     }
 
-    // =====================================================================================
-    // CONSULTAS PARA UI
-    // =====================================================================================
+    
+    
+    
 
     public int getPosicaoJogador(int idJogador) {
         exigirPartidaIniciada();
@@ -987,7 +973,7 @@ public class GameModel {
         return jogadores.get(idJogador).isAtivo();
     }
 
-    // Sinais para a UI (TabuleiroFrame)
+    
     public boolean podeLancarDadosNesteTurno() { return !jaLancouNesteTurno; }
     public boolean jaLancouNesteTurno() { return jaLancouNesteTurno; }
     public boolean isJogadorDaVezNaPrisao() {
@@ -1000,19 +986,19 @@ public class GameModel {
         return jogadores.get(getJogadorDaVez()).temCartaSaidaLivre();
     }
 
-    /** Atalho direto para habilitar o botão "Exibir/Abrir banco de cartas" na UI. */
+    
     public boolean podeAbrirBancoDeCartasJogadorDaVez() {
         return jogadorPossuiAlgumaCartaOuPropriedade(getJogadorDaVez());
     }
 
-    // =============================== Banco de cartas (para UI) ===============================
+    
 
     public static final class BancoDeCartasItem {
         public static enum Tipo { TERRITORIO, COMPANHIA, SORTE_REVES }
         private final Tipo tipo;
-        private final String nome;              // ex.: "Av. Paulista" ou "Sorte/Revés #05"
-        private final Integer numeroSorteReves; // se SORTE_REVES
-        private final Integer posicaoTabuleiro; // se TERRITORIO
+        private final String nome;              
+        private final Integer numeroSorteReves; 
+        private final Integer posicaoTabuleiro; 
         public BancoDeCartasItem(Tipo tipo, String nome, Integer numeroSorteReves, Integer posicaoTabuleiro) {
             this.tipo = tipo;
             this.nome = nome;
@@ -1025,7 +1011,7 @@ public class GameModel {
         public Integer getPosicaoTabuleiro() { return posicaoTabuleiro; }
     }
 
-    /** Retorna os nomes das propriedades do jogador (para habilitação da UI). */
+    
     public List<String> getNomesPropriedadesDoJogador(int idJogador) {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -1043,7 +1029,7 @@ public class GameModel {
         return nomes;
     }
 
-    /** True se o jogador possui ao menos uma propriedade ou alguma carta de Sorte/Revés. */
+    
     public boolean jogadorPossuiAlgumaCartaOuPropriedade(int idJogador) {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -1055,7 +1041,7 @@ public class GameModel {
         return temProp || temSR;
     }
 
-    /** Lista consolidada para a janela do “banco de cartas”. */
+    
     public List<BancoDeCartasItem> getBancoDeCartasDoJogador(int idJogador) {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -1065,7 +1051,7 @@ public class GameModel {
         Jogador dono = jogadores.get(idJogador);
         List<BancoDeCartasItem> items = new ArrayList<>();
 
-        // Territórios e companhias do jogador
+        
         for (int i = 0; i < tabuleiro.tamanho(); i++) {
             Casa c = tabuleiro.getCasa(i);
             if (c instanceof AtivoCompravel) {
@@ -1085,7 +1071,7 @@ public class GameModel {
             }
         }
 
-        // Cartas Sorte/Revés
+        
         for (Integer num : getCartasSorteRevesDoJogador(idJogador)) {
             items.add(new BancoDeCartasItem(
                     BancoDeCartasItem.Tipo.SORTE_REVES,
@@ -1098,7 +1084,7 @@ public class GameModel {
         return items;
     }
 
-    /** Nome do território onde o jogador da vez está, se aplicável. */
+    
     public Optional<String> getNomeDoTerritorioDaCasaAtualDoJogadorDaVez() {
         exigirPartidaIniciada();
         exigirTabuleiroCarregado();
@@ -1110,9 +1096,9 @@ public class GameModel {
         return Optional.empty();
     }
 
-    // =====================================================================================
-    // HELPERS DE TABULEIRO (para testes)
-    // =====================================================================================
+    
+    
+    
 
     public void carregarTabuleiroMinimoParaTeste(int nCasas) {
         if (nCasas <= 0)
@@ -1247,7 +1233,7 @@ public class GameModel {
             throw new IllegalArgumentException("posicao fora do tabuleiro");
         }
         jogadores.get(idJogador).moverPara(posicao);
-        this.posicaoDaQuedaAtual = posicao; // simula que 'caiu' aqui
+        this.posicaoDaQuedaAtual = posicao; 
         notifyObservers();
     }
 
@@ -1301,9 +1287,9 @@ public class GameModel {
         notifyObservers();
     }
 
-    // =====================================================================================
-    // TÉRMINO DA PARTIDA
-    // =====================================================================================
+    
+    
+    
 
     public static enum FimPartidaMotivo {
         JANELA_FECHADA,
@@ -1387,9 +1373,9 @@ public class GameModel {
         return lista;
     }
 
-    // =====================================================================================
-    // SALVAMENTO E RECUPERAÇÃO DE ESTADO
-    // =====================================================================================
+    
+    
+    
 
     public static final class PlayerState {
         private final int id;
@@ -1722,9 +1708,9 @@ public class GameModel {
         notifyObservers();
     }
 
-    // =====================================================================================
-    // SUPORTES INTERNOS
-    // =====================================================================================
+    
+    
+    
 
     private int getIndicePrisaoOrThrow() {
         int idx = encontrarIndicePorTipo("PRISAO");
@@ -1733,7 +1719,7 @@ public class GameModel {
         return idx;
     }
 
-    /** IMPOSTO/LUCRO automáticos na casa atual (notificando a UI). */
+    
     private Transacao aplicarCasaEspecialSeDevida() {
         final int id = getJogadorDaVez();
         final Jogador j = jogadores.get(id);
@@ -1777,7 +1763,7 @@ public class GameModel {
             return Transacao.lucroRecebido(id, casa.getPosicao(), valor);
         }
 
-        return null; // não é casa especial
+        return null; 
     }
 
     @SuppressWarnings("unused")
@@ -1802,7 +1788,7 @@ public class GameModel {
         for (AtivoCompravel ativo : minhas) {
             if (j.getSaldo() >= valorNecessario)
                 break;
-            final int pagamento = (Math.max(0, ativo.valorAgregadoAtual()) * 9) / 10; // 90%
+            final int pagamento = (Math.max(0, ativo.valorAgregadoAtual()) * 9) / 10; 
             banco.debitar(pagamento);
             j.creditar(pagamento);
             ativo.resetarParaBanco();
@@ -1857,9 +1843,9 @@ public class GameModel {
         notifyObservers();
     }
 
-    // =====================================================================================
-    // OBSERVER
-    // =====================================================================================
+    
+    
+    
 
     public static interface Observer {
         void update(GameModel source);

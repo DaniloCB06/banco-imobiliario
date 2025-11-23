@@ -17,9 +17,6 @@ import javax.swing.SwingConstants;
 
 import banco_imobiliario_controller.AppController;
 
-/**
- * Exibição da janela inicial.
- */
 public final class JanelaInicialFrame extends JFrame {
     private static final long serialVersionUID = 1L;
 
@@ -42,7 +39,7 @@ public final class JanelaInicialFrame extends JFrame {
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 22f));
         root.add(titulo, BorderLayout.NORTH);
 
-        // Centro: seletor de quantidade
+        
         JPanel center = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST;
@@ -58,7 +55,7 @@ public final class JanelaInicialFrame extends JFrame {
 
         root.add(center, BorderLayout.CENTER);
 
-        // Rodapé: botões
+        
         JPanel footer = new JPanel();
         JButton btnCancelar = new JButton("Cancelar");
         btnCancelar.addActionListener(new java.awt.event.ActionListener() {

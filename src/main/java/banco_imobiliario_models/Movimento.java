@@ -6,11 +6,6 @@ final class Movimento {
         return d1 + d2;
     }
 
-    /**
-     * Avança o peão do jogador da vez conforme d1+d2.
-     * NÃO trata prisão, turno ou efeitos de casa.
-     * Sinaliza se passou/caiu no ponto de partida.
-     */
     static ResultadoMovimento executar(Jogador jogador, int d1, int d2, Tabuleiro tabuleiro) {
         final int totalCasas = tabuleiro.tamanho();
         final int desloc = passos(d1, d2);
@@ -18,15 +13,13 @@ final class Movimento {
         final int posAnt = jogador.getPosicao();
         final int posNova = (posAnt + desloc) % totalCasas;
 
-        // Detecta passagem/queda no início (robusto mesmo se o índice mudar)
+        
         final int start = tabuleiro.indicePontoDePartida();
         boolean passouOuCaiuNoInicio = false;
         if (desloc > 0) {
             if (posAnt <= posNova) {
-                // sem wrap
                 passouOuCaiuNoInicio = (start > posAnt && start <= posNova);
             } else {
-                // com wrap
                 passouOuCaiuNoInicio = (start > posAnt) || (start <= posNova);
             }
         }

@@ -4,10 +4,6 @@ import java.lang.reflect.Field;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Encapsula a fonte de aleatoriedade.
- * Permite injetar seed para reprodutibilidade em testes (JUnit 4).
- */
 final class RandomProvider {
     private final Random random;
     private static final Field SEED_FIELD;
@@ -27,7 +23,7 @@ final class RandomProvider {
         this.random = (seed == null) ? new Random() : new Random(seed);
     }
 
-    /** Retorna um inteiro uniforme em [1,6]. */
+    
     int nextDieInclusive() {
         return random.nextInt(6) + 1;
     }

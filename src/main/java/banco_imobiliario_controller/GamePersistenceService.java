@@ -24,9 +24,6 @@ import java.util.stream.Collectors;
 
 import banco_imobiliario_models.GameModel;
 
-/**
- * Responsável por serializar/deserializar o estado completo da partida em um arquivo texto ASCII.
- */
 public final class GamePersistenceService {
 
     public static final class LoadedGame {
