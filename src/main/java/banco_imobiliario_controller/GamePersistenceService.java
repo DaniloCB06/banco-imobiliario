@@ -82,6 +82,7 @@ public final class GamePersistenceService {
         addLinha(linhas, "sr.ponteiro", String.valueOf(estado.getPonteiroBaralhoSR()));
         addLinha(linhas, "sr.ultima", formatOptional(estado.getUltimaCartaNumero()));
         addLinha(linhas, "sr.buffer", formatOptional(estado.getCartaBufferNumero()));
+        addLinha(linhas, "sr.ordem", join(estado.getOrdemBaralhoSR()));
 
         List<Map.Entry<Integer, Set<Integer>>> cartasOrdenadas = new ArrayList<>(estado.getCartasSRPorJogador().entrySet());
         cartasOrdenadas.sort(Map.Entry.comparingByKey());
@@ -136,6 +137,7 @@ public final class GamePersistenceService {
         int ponteiroBaralho = parseInt(require(props, "sr.ponteiro"));
         Integer ultimaCarta = parseOptional(require(props, "sr.ultima"));
         Integer bufferCarta = parseOptional(require(props, "sr.buffer"));
+        List<Integer> ordemBaralho = parseOptionalIntList(props.getProperty("sr.ordem"));
 
         Map<Integer, Set<Integer>> cartasSR = lerCartasSR(props);
 
@@ -160,7 +162,8 @@ public final class GamePersistenceService {
                 ponteiroBaralho,
                 cartasSR,
                 ultimaCarta,
-                bufferCarta
+                bufferCarta,
+                ordemBaralho
         );
 
         return new LoadedGame(state, perfis);
@@ -301,6 +304,13 @@ public final class GamePersistenceService {
             valores.add(parseInt(token));
         }
         return valores;
+    }
+
+    private static List<Integer> parseOptionalIntList(String raw) throws IOException {
+        if (raw == null || raw.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        return parseIntList(raw);
     }
 
     private static String formatOptional(Integer valor) {

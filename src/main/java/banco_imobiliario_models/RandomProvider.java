@@ -1,6 +1,8 @@
 package banco_imobiliario_models;
 
 import java.lang.reflect.Field;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -50,5 +52,12 @@ final class RandomProvider {
         } catch (Exception ex) {
             throw new IllegalStateException("Falha ao restaurar estado do gerador aleatório.", ex);
         }
+    }
+
+    <T> void shuffle(List<T> list) {
+        if (list == null || list.size() <= 1) {
+            return;
+        }
+        Collections.shuffle(list, random);
     }
 }

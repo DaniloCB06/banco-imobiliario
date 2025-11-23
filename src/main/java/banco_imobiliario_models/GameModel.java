@@ -79,6 +79,7 @@ public class GameModel {
     
     private int tamanhoBaralhoSR = 30;
     private int ponteiroBaralhoSR = 0;
+    private final List<Integer> ordemBaralhoSR = new ArrayList<>();
 
     
     private final Map<Integer, Set<Integer>> cartasSRPorJogador = new HashMap<>();
@@ -94,7 +95,7 @@ public class GameModel {
             totalCartas = limite;
         }
         this.tamanhoBaralhoSR = totalCartas;
-        this.ponteiroBaralhoSR = 0;
+        reconstruirBaralhoSorteReves();
     }
 
     
@@ -127,13 +128,46 @@ public class GameModel {
         return out;
     }
 
+    private void reconstruirBaralhoSorteReves() {
+        ordemBaralhoSR.clear();
+        if (tamanhoBaralhoSR <= 0) {
+            tamanhoBaralhoSR = SorteRevesCards.total();
+        }
+        for (int i = 1; i <= tamanhoBaralhoSR; i++) {
+            ordemBaralhoSR.add(i);
+        }
+        embaralharOrdemBaralhoSorteReves();
+        ponteiroBaralhoSR = 0;
+    }
+
+    private void embaralharOrdemBaralhoSorteReves() {
+        if (ordemBaralhoSR.size() <= 1) {
+            return;
+        }
+        if (rng != null) {
+            rng.shuffle(ordemBaralhoSR);
+        } else {
+            Collections.shuffle(ordemBaralhoSR);
+        }
+    }
+
+    private void sincronizarBaralhoSorteRevesSeNecessario() {
+        if (ordemBaralhoSR.size() != tamanhoBaralhoSR) {
+            reconstruirBaralhoSorteReves();
+        }
+    }
+
     
     private SorteRevesCard sortearCartaParaJogador(int jogadorId) {
         if (tamanhoBaralhoSR <= 0) {
             tamanhoBaralhoSR = SorteRevesCards.total();
         }
-        int numero = (ponteiroBaralhoSR % tamanhoBaralhoSR) + 1;
-        ponteiroBaralhoSR++;
+        sincronizarBaralhoSorteRevesSeNecessario();
+        if (ordemBaralhoSR.isEmpty()) {
+            reconstruirBaralhoSorteReves();
+        }
+        int numero = ordemBaralhoSR.get(ponteiroBaralhoSR);
+        ponteiroBaralhoSR = (ponteiroBaralhoSR + 1) % ordemBaralhoSR.size();
 
         SorteRevesCards.Definition def = SorteRevesCards.get(numero);
         String titulo = def != null ? def.getTitulo() : String.format(Locale.ROOT, "Sorte/Revés #%02d", numero);
@@ -318,7 +352,7 @@ public class GameModel {
             cartasSRPorJogador.put(i, new HashSet<>());
         }
 
-        this.configurarBaralhoSorteRevesPadrao(30);
+        configurarBaralhoSorteRevesPadrao(30);
 
         this.ultimoD1 = this.ultimoD2 = null;
         this.jaLancouNesteTurno = false;
@@ -1217,10 +1251,12 @@ public class GameModel {
         if (tamanhoBaralhoSR <= 0) {
             tamanhoBaralhoSR = SorteRevesCards.total();
         }
-        if (numero > tamanhoBaralhoSR) {
+        sincronizarBaralhoSorteRevesSeNecessario();
+        int idx = ordemBaralhoSR.indexOf(numero);
+        if (idx < 0) {
             throw new IllegalArgumentException("numero fora do baralho configurado");
         }
-        this.ponteiroBaralhoSR = numero - 1;
+        this.ponteiroBaralhoSR = idx;
     }
 
     public void debugForcarPosicaoJogador(int idJogador, int posicao) {
@@ -1443,6 +1479,7 @@ public class GameModel {
         private final Map<Integer, Set<Integer>> cartasSRPorJogador;
         private final Integer ultimaCartaNumero;
         private final Integer cartaBufferNumero;
+        private final List<Integer> ordemBaralhoSR;
 
         public SaveState(List<PlayerState> jogadores,
                          List<PropertyState> propriedades,
@@ -1464,7 +1501,8 @@ public class GameModel {
                          int ponteiroBaralhoSR,
                          Map<Integer, Set<Integer>> cartasSRPorJogador,
                          Integer ultimaCartaNumero,
-                         Integer cartaBufferNumero) {
+                         Integer cartaBufferNumero,
+                         List<Integer> ordemBaralhoSR) {
             this.jogadores = Collections.unmodifiableList(new ArrayList<>(jogadores));
             this.propriedades = Collections.unmodifiableList(new ArrayList<>(propriedades));
             this.ordemTurno = Collections.unmodifiableList(new ArrayList<>(ordemTurno));
@@ -1490,6 +1528,7 @@ public class GameModel {
             this.cartasSRPorJogador = Collections.unmodifiableMap(mapa);
             this.ultimaCartaNumero = ultimaCartaNumero;
             this.cartaBufferNumero = cartaBufferNumero;
+            this.ordemBaralhoSR = Collections.unmodifiableList(new ArrayList<>(ordemBaralhoSR == null ? Collections.emptyList() : ordemBaralhoSR));
         }
 
         public List<PlayerState> getJogadores() { return jogadores; }
@@ -1513,6 +1552,7 @@ public class GameModel {
         public Map<Integer, Set<Integer>> getCartasSRPorJogador() { return cartasSRPorJogador; }
         public Integer getUltimaCartaNumero() { return ultimaCartaNumero; }
         public Integer getCartaBufferNumero() { return cartaBufferNumero; }
+        public List<Integer> getOrdemBaralhoSR() { return ordemBaralhoSR; }
     }
 
     public SaveState exportarEstado() {
@@ -1570,7 +1610,8 @@ public class GameModel {
                 ponteiroBaralhoSR,
                 cartas,
                 ultimaCartaNumero,
-                bufferCartaNumero
+                bufferCartaNumero,
+                ordemBaralhoSR
         );
     }
 
@@ -1672,12 +1713,23 @@ public class GameModel {
         }
 
         this.tamanhoBaralhoSR = state.getTamanhoBaralhoSR() <= 0 ? SorteRevesCards.total() : state.getTamanhoBaralhoSR();
-        int modulo = Math.max(1, this.tamanhoBaralhoSR);
+        List<Integer> ordemRestaurada = state.getOrdemBaralhoSR();
+        if (ordemRestaurada != null && !ordemRestaurada.isEmpty()) {
+            ordemBaralhoSR.clear();
+            ordemBaralhoSR.addAll(ordemRestaurada);
+            this.tamanhoBaralhoSR = ordemBaralhoSR.size();
+        } else {
+            reconstruirBaralhoSorteReves();
+        }
         int ponteiro = state.getPonteiroBaralhoSR();
         if (ponteiro < 0) {
             ponteiro = 0;
         }
-        this.ponteiroBaralhoSR = ponteiro % modulo;
+        if (!ordemBaralhoSR.isEmpty()) {
+            this.ponteiroBaralhoSR = ponteiro % ordemBaralhoSR.size();
+        } else {
+            this.ponteiroBaralhoSR = 0;
+        }
 
         this.ultimoD1 = state.getUltimoD1();
         this.ultimoD2 = state.getUltimoD2();
@@ -1699,6 +1751,8 @@ public class GameModel {
         } else {
             this.srRecemSacada = Optional.empty();
         }
+
+        sincronizarBaralhoSorteRevesSeNecessario();
 
         this.partidaEncerrada = false;
         this.resultadoPartida = null;
